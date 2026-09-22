@@ -1,0 +1,10 @@
+# These are the packages this project needs to run.
+# Install them with:   pip install -r requirements.txt
+#
+# PyQt6 is the toolkit used to draw the window, the joystick, the buttons,
+# and the sliders. The other two are parts that PyQt6 needs and installs
+# automatically alongside it — you don't need to think about them.
+
+PyQt6==6.9.1
+PyQt6-Qt6==6.9.2
+PyQt6_sip==13.10.2
