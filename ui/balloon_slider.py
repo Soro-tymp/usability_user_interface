@@ -1,9 +1,3 @@
-"""
-balloon_slider.py — BalloonSlider: a vertical slider used as a live pressure
-gauge for one actuator channel. Trimmed from the main app's
-ui/balloon_slider.py (dropped the touch-drag-anywhere and settable-range
-behavior — here it's driven read-only by BalloonPressuresBinding).
-"""
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSlider, QSizePolicy
 from PyQt6.QtCore import Qt
@@ -20,7 +14,6 @@ def convert_pressure_slider_int_to_pressure(slider_value: int) -> float:
 
 
 class BalloonSlider(QWidget):
-    """Vertical slider styled as a live pressure gauge for one channel."""
 
     def __init__(self, index: int, min_pressure: float = 0.0, max_pressure: float = 1.0, parent=None):
         super().__init__(parent)

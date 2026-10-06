@@ -1,13 +1,12 @@
 """
-motion_controller.py — Minimal motion/kinematics model.
+It keeps the maths that turns a joystick movement into pressures for
+the 6 balloons, measured from a resting centre pressure. Everything
+that talks to the real hardware has been removed, so it runs on any
+computer without the robot plugged in.
 
-Trimmed down from the main app's controllers/motion_controller.py: keeps
-the kinematics math that maps a joystick drag vector to 6 per-channel
-balloon pressures around a neutral center, and drops everything that talks
-to real hardware (DeviceController, serial commands) — nothing here needs
-a physical device to run. The math itself (kinematics_from_drag, the
-orientation mapping) is copied unmodified in spirit from the real
-MotionController, just without the numpy dependency.
+Two methods were added for the pedal-driven procedure: set_neutral_level
+and set_pressures.
+
 """
 
 import math
@@ -20,11 +19,14 @@ NUM_CHANNELS = 6
 MIN_PRESSURE = 0.0
 MAX_PRESSURE = 1.0
 
-# Per-channel (x, y) weights for mapping a drag vector to orientation
-# pressures — equivalent to the real MotionController's 4x6 H matrix
-# reduced to just its orientation rows (translation is handled instead by
-# kinematics_from_drag below), normalized so a unit drag maps to a unit
-# offset from center.
+# weights (x, y) per ognuno dei 6 balloon, usati per la orientation:
+# dicono quanto ogni balloon reagisce al joystick quando si ruota.
+# Vengono dalle righe di orientation della H matrix 4x6 del
+# MotionController reale (la translation invece non li usa, è gestita
+# da kinematics_from_drag più sotto). Sono scalati in modo che con lo
+# stick tutto spinto il balloon si sposti del suo offset massimo dal centre.
+# I numeri sono cos/sin di 0°, 120° e 240°, ripetuti due volte:
+# i balloon 0-1-2 e 3-4-5 hanno gli stessi weights
 _ORIENTATION_WEIGHTS = [
     (1.0, 0.0),
     (-0.5, 0.866025403784439),
@@ -59,25 +61,42 @@ class MotionController(SubjectMixin):
     def get_absolute_pressures(self) -> List[float]:
         return self.current_pressures.copy()
 
+    def set_neutral_level(self, level: float | None) -> None:
+        """Move the neutral point the joysticks steer around.
+        Translation/orientation are computed as offsets from `centers`.
+        That would be the midpoint (0.5), so as soon as you touch a
+        joystick after inflating, every balloon would jump from the
+        inflation level back toward 0.5. Once the balloons have reached
+        the stability threshold (see main_procedure.py) the
+        neutral point is set to 0.7 instead (arbitrary), sois compensated
+        around the stable state. None restores the default midpoints."""
+        if level is None:
+            self.centers = [(mn + mx) / 2.0 for mn, mx in zip(self.mins, self.maxs)]
+        else:
+            self.centers = [max(mn, min(mx, level)) for mn, mx in zip(self.mins, self.maxs)]
+
+    def set_pressures(self, pressures: List[float]) -> None:
+        """Set each channel individually --> Used for the final
+        deflation ramp, so every balloon goes down from its OWN current
+        value instead of all jumping to one shared level first."""
+        self._apply_pressures(list(pressures))
+
     def reset_state_to_centers(self) -> None:
         self._apply_pressures(self.centers.copy())
 
     def set_inflation_level(self, level: float) -> List[float]:
-        """Set every channel to the same pressure level (clamped to
-        [min, max]) — a simplified stand-in for the real MotionController's
-        set_inflation_level/set_inflation_percentage, which vary the target
-        per-channel from real slider-configured limits. Here mins/maxs are
+        """Set every channel to the same pressure level a + here mins/maxs are
         uniform (0..1) across all 6 channels, so a flat level is enough."""
         level = max(self.mins[0], min(self.maxs[0], level))
         self._apply_pressures([level] * self.NUM_CHANNELS)
         return self.current_pressures.copy()
 
     def kinematics_from_drag(self, dx: float, dy: float) -> List[float]:
-        """Pure-mapping: absolute pressures from a drag vector, centered
-        about each actuator's neutral pressure. Channels are arranged
-        evenly around a circle (60 degrees apart for 6 channels), so a
-        drag toward a channel's direction raises that channel's pressure
-        and lowers the opposite one's."""
+        """ Calcola le 6 pressioni dei balloon a partire da un movimento del
+joystick, partendo dalla pressione di riposo (centre) di ognuno. Le
+calcola soltanto, non le applica. I balloon sono distribuiti in cerchio
+(uno ogni 60°), quindi spingendo lo stick verso un balloon quello si
+gonfia e quello opposto si sgonfia."""
         mag = math.hypot(dx, dy)
         out = []
         for i in range(self.NUM_CHANNELS):
@@ -96,8 +115,10 @@ class MotionController(SubjectMixin):
 
     def apply_orientation_from_drag(self, dx: float, dy: float) -> List[float]:
         """Drive tip orientation from a normalized drag/joystick vector,
-        using a fixed set of per-channel weights instead of translation's
-        radial geometry."""
+        invece della geometria a cerchio usata per la translation,
+        usa i weights fissi di _ORIENTATION_WEIGHTS (uno per balloon).
+        A differenza della translation qui l'effetto è lineare: metà
+        spinta = metà effetto"""
         out = []
         for i in range(self.NUM_CHANNELS):
             wx, wy = _ORIENTATION_WEIGHTS[i]
@@ -109,8 +130,10 @@ class MotionController(SubjectMixin):
         return self.current_pressures.copy()
 
     def _apply_pressures(self, pressures: List[float]) -> None:
+        # tutte le modifiche alle pressioni passano da qui --> ogni valore
+        # viene tenuto dentro i limiti (min/max), poi salvato
         self.current_pressures = [
             max(self.mins[i], min(self.maxs[i], pressures[i]))
             for i in range(self.NUM_CHANNELS)
         ]
-        self.notify()
+        self.notify() # update gauges on the screen

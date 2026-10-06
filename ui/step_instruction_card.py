@@ -1,12 +1,3 @@
-"""
-step_instruction_card.py — StepInstructionCard: shows the current
-procedure step's title and instructions. Display-only — the real app
-(ui/widget/step_instruction_card.py, same name) keeps this separate from
-the Back/Confirm buttons too, since those live in the side panels on
-either side of it (see panel_left.py / panel_right.py), not on the card
-itself.
-"""
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
 
@@ -52,3 +43,4 @@ class StepInstructionCard(QWidget):
     def set_content(self, title: str, body: str) -> None:
         self._title_label.setText(title)
         self._body_label.setText(body)
+        

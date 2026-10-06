@@ -1,24 +1,3 @@
-
-"""
-directed_graph.py
-
-A directed graph with idempotent node/edge mutations, Tarjan's SCC detection,
-and Kahn's topological sort. Intended as the substrate for an MVVC
-UpdateManager: nodes are Model/ViewModel elements, edges express update
-dependencies, SCCs flag illegal cycles, and the topological order drives
-non-reentrant propagation.
-
-Design notes:
-    - Mutation methods return True if the graph was actually changed,
-      False if the call was a no-op. This lets the caller detect real
-      structural changes cheaply (e.g. to invalidate cached orderings).
-    - add_edge is strict: both endpoints must already be nodes. Silently
-      auto-creating nodes on edge insertion tends to hide typos in
-      dependency-graph code.
-    - Tarjan's SCC is implemented iteratively to avoid recursion limits
-      on large graphs.
-"""
-
 from __future__ import annotations
 
 from collections import deque
@@ -26,18 +5,12 @@ from typing import Hashable, Iterable, Iterator
 
 
 class CycleError(Exception):
-    """Raised when a topological sort is requested on a cyclic graph.
-
-    The offending non-trivial SCCs are attached as ``self.cycles``.
-    """
-
     def __init__(self, cycles: list[list[Hashable]]):
         self.cycles = cycles
         super().__init__(f"Graph contains cycles: {cycles}")
 
 
 class DirectedGraph:
-    """Directed graph with idempotent mutation and cycle analysis."""
 
     __slots__ = ("_successors", "_predecessors")
 
@@ -45,7 +18,7 @@ class DirectedGraph:
         self._successors: dict[Hashable, set[Hashable]] = {}
         self._predecessors: dict[Hashable, set[Hashable]] = {}
 
-    # ------------------------------------------------------------------ introspection
+    # introspection
 
     def __contains__(self, node: Hashable) -> bool:
         return node in self._successors
@@ -74,10 +47,9 @@ class DirectedGraph:
     def has_edge(self, source: Hashable, target: Hashable) -> bool:
         return source in self._successors and target in self._successors[source]
 
-    # ------------------------------------------------------------------ mutation (idempotent)
+    # mutation
 
     def add_node(self, node: Hashable) -> bool:
-        """Add ``node``. Return True if newly added, False if already present."""
         if node in self._successors:
             return False
         self._successors[node] = set()
@@ -85,7 +57,6 @@ class DirectedGraph:
         return True
 
     def remove_node(self, node: Hashable) -> bool:
-        """Remove ``node`` and all incident edges. Return True if removed, False if absent."""
         if node not in self._successors:
             return False
         for succ in self._successors[node]:
@@ -97,11 +68,6 @@ class DirectedGraph:
         return True
 
     def add_edge(self, source: Hashable, target: Hashable) -> bool:
-        """Add an edge ``source -> target``. Both endpoints must already exist.
-
-        Returns True if the edge was newly added, False if it was already present.
-        Raises KeyError if either endpoint is missing.
-        """
         if source not in self._successors:
             raise KeyError(f"source node not in graph: {source!r}")
         if target not in self._successors:
@@ -113,7 +79,6 @@ class DirectedGraph:
         return True
 
     def remove_edge(self, source: Hashable, target: Hashable) -> bool:
-        """Remove edge ``source -> target`` if present. Return True if removed, False otherwise."""
         succs = self._successors.get(source)
         if succs is None or target not in succs:
             return False
@@ -126,21 +91,14 @@ class DirectedGraph:
         nodes: Iterable[Hashable] = (),
         edges: Iterable[tuple[Hashable, Hashable]] = (),
     ) -> None:
-        """Bulk convenience: add a batch of nodes then a batch of edges."""
         for n in nodes:
             self.add_node(n)
         for s, t in edges:
             self.add_edge(s, t)
 
-    # ------------------------------------------------------------------ analysis
+    # analysis
 
     def find_sccs(self) -> list[list[Hashable]]:
-        """Tarjan's SCC algorithm (iterative).
-
-        Returns all strongly connected components. Components appear in
-        reverse topological order of the condensation DAG, which is the
-        natural output of Tarjan's.
-        """
         index_of: dict[Hashable, int] = {}
         lowlink: dict[Hashable, int] = {}
         on_stack: dict[Hashable, bool] = {}
@@ -152,13 +110,11 @@ class DirectedGraph:
             if root in index_of:
                 continue
 
-            # Seed the DFS.
             index_of[root] = counter
             lowlink[root] = counter
             counter += 1
             tarjan_stack.append(root)
             on_stack[root] = True
-            # Each work frame: (node, iterator over that node's successors).
             work: list[tuple[Hashable, Iterator[Hashable]]] = [
                 (root, iter(self._successors[root]))
             ]
@@ -167,8 +123,6 @@ class DirectedGraph:
                 node, succ_iter = work[-1]
                 recursed = False
 
-                # Drain successors. Cross/back edges update lowlink in-place;
-                # tree edges cause us to "recurse" by pushing a new frame.
                 for succ in succ_iter:
                     if succ not in index_of:
                         index_of[succ] = counter
@@ -186,7 +140,6 @@ class DirectedGraph:
                 if recursed:
                     continue
 
-                # All successors of `node` processed -- finalize it.
                 if lowlink[node] == index_of[node]:
                     scc: list[Hashable] = []
                     while True:
@@ -206,10 +159,6 @@ class DirectedGraph:
         return result
 
     def find_cycles(self) -> list[list[Hashable]]:
-        """Return only non-trivial SCCs: size > 1, or singletons with a self-loop.
-
-        These are exactly the SCCs that prevent a valid topological order.
-        """
         cycles: list[list[Hashable]] = []
         for scc in self.find_sccs():
             if len(scc) > 1:
@@ -222,14 +171,6 @@ class DirectedGraph:
         return not self.find_cycles()
 
     def topological_sort(self) -> list[Hashable]:
-        """Kahn's algorithm.
-
-        Returns a linear extension of the DAG's partial order: for every
-        edge u -> v, u appears before v in the result.
-
-        Raises CycleError (with the offending SCCs attached) if the graph
-        is not acyclic.
-        """
         in_degree = {n: len(self._predecessors[n]) for n in self._successors}
         ready: deque[Hashable] = deque(n for n, d in in_degree.items() if d == 0)
         order: list[Hashable] = []

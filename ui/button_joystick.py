@@ -1,15 +1,6 @@
 """
-button_joystick.py — Directional button-pad joystick.
-
-A 3x3 grid of 8 directional buttons (compass layout, center empty) that
-emits the same positionChanged(x, y) signal as Joystick (joystick.py) —
-full magnitude in the pressed button's direction, (0, 0) on release — so
-it wires into motion the same way, via JoystickBinding. Adapted from the
-main app's ui/widget/button_joystick.py (minus the .hide() call and
-step-visibility wiring, which belong to the full procedure wizard) — the
-one deliberate difference is BUTTON_SIZE/margins/spacing below, shrunk to
-fit this demo's narrower side panel (see panel_left.py's SIDE_PANEL_WIDTH)
-without spilling past its edges.
+A 3x3 grid of 8 directional buttons that emits the same positionChanged(x, y)
+signal as Joystick (joystick.py)
 """
 
 import math
@@ -22,8 +13,6 @@ from ui.styles import COLOR_BACKGROUND_INPUT, COLOR_PRIMARY, COLOR_PRIMARY_HOVER
 BUTTON_SIZE = 40
 _DIAG = 1.0 / math.sqrt(2)  # matches the analog Joystick's max diagonal reach
 
-# (glyph, dx, dy, row, col) — dy grows downward, matching
-# Joystick._update_handle_pos's convention.
 _BUTTONS = [
     ("↖", -_DIAG, -_DIAG, 0, 0),
     ("▲", 0.0, -1.0, 0, 1),
@@ -37,7 +26,7 @@ _BUTTONS = [
 
 
 class ButtonJoystick(QWidget):
-    """3x3 compass of directional buttons (8 directions, center left empty)."""
+    """3x3 compass of directional buttons (8 directions)"""
 
     positionChanged = pyqtSignal(float, float)
 

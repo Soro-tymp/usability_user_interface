@@ -1,40 +1,110 @@
-# Joystick + Buttons + Balloons demo
+# What is all of this???
 
-A small desktop app showing two on-screen joysticks and a directional
-button pad that live-drive 6 "balloon" pressure gauges, laid out like the
-real clinician app (left panel, center camera view, right panel, bottom
-procedure-stage bar). No hardware needed — runs entirely on your computer.
+This is a small desktop demo of the clinician interface while using the
+ear robot. It has two on-screen joysticks and a directional button pad, 
+(during the alignment phase) and moving them drives directly the six 
+balloon pressure gauges in real time. The layout presents a panel on the 
+left, the camera view in the middle, a panel on the right and the procedure 
+steps along the bottom.
 
-## Install
+Actually no hardware is necessarily needed, everything can run on computer
+and every action can be performed and tested even without the pedal and the
+XAC (Xbox Adaptive Control joystick).
 
-Requires Python 3.10+.
+## To install the demo (everything in here is making reference to MacOs,
+## for Windows systems the start could differ a bit)
+
+Python 3.10 or newer is needed. Then:
 
 ```
 pip install -r requirements.txt
 ```
 
-## Run
+## To run the demo make sure to use the following file:
 
 ```
 python main_procedure.py
 ```
 
-Press `Esc` or close the window to quit.
+To quit, press `Esc` or just close the window.
 
-## What to expect
+## The screen presentation 
 
-- **Left panel:** Control and Back buttons.
-- **Center:** a static camera placeholder image, and a Control panel
-  (opened via the left panel's Control button) with 2 joysticks
-  (Translation, Rotation), the 6 balloon gauges, and a Reset to center
-  button.
-- **Right panel:** the current step's instructions, a directional button
-  pad (only during the "Align" step), and a Confirm button.
-- **Bottom bar:** the 4 mock procedure steps — Insert → Inflate → Align →
-  Complete.
+On the left there are two buttons, Control and Back. The first must be 
+used in the very first step, while "Back" can be used if there's the 
+need of returning back to the previous step.
 
-Click Confirm (or press Enter) to move forward through the steps, Back to
-go back. Confirming Inflate fills the balloon gauges; confirming the last
-step ("Finish") empties them again — and it's fully reversible in both
-directions. The joysticks and button pad work at any step once the
-Control panel is open.
+In the middle there's a placeholder camera image (would be useful to 
+substitute it with the one of an actual ear, may be reconstructed from
+CT scans). 
+
+The control panel has the two joysticks, which are "Translation" and
+"Rotation" (future maybe to be combined into a single one), the 6 
+balloon gauges and a button to reset everything to the center.
+
+On the right the instructions for the current step can be found, the
+Confirm button and, during the Align step only, the directional pad.
+
+Along the bottom are the four steps of the mock procedure: Insert,
+Inflate, Align and Complete (so that user doesn't loose track of 
+the step of the procedure they are performing).
+
+## Breaking down the procedure: the essentials
+
+The procedure is driven by the foot pedal and the Xbox Adaptive Joystick,
+but to test is is sufficient to have a computer.
+
+**1. Insert.** Click Confirm or press Enter.
+
+**2. Inflate.** Hold the pedal down to inflate all the balloons (if you let
+go, inflation pauses). When the balloons reach the stability threshold (0.7,
+needs to be fixed), inflation stops and the screen shows "Ready to proceed 
+to the next step" with a 5-second countdown. After that the app moves on to
+Align by itself. The threshold is `INFLATION_THRESHOLD` in `main_procedure.py`. 
+I set it to 0.70 for now, it's just a placeholder. If you do not have a pedal
+to test it just press "b" on the keyboard (it works as the pedal).
+
+**3. Align.** Press X1 for translation or X4 for rotation (here I am not sure
+of the buttons, is for sure two of the four displayed in a cross fashion, but
+it could be that they were differing between mac and windows... anyhow, it 
+should be pretty easy to change what is written on the screen relative to 
+them. Apart from that in the folder there's a file useful to understand which
+button does what. I explain it better below), then move the stick. The middle 
+of the screen shows a simulated 3D endoscope view inside the ear canal. 
+Translation moves the camera sideways, so the walls close to the camera shift 
+more than the eardrum does. Rotation tilts the camera, so you see the eardrum 
+at an angle. The cross in the middle doesn't move. When its line of sight 
+lands on the green target zone, it turns green. At that point, hold the pedal 
+for 5 seconds to lock the position. 
+
+If you do not have the joystick simply use the on-screen joystick by using
+a mouse. If you wanna check that the translation/rotation selection does
+actually work you should be able to use T and R on the keyboard to discriminate
+between the two.
+
+The view is drawn in the file `ui/camera_view.py`, and the geometry behind 
+it is in `ui/endoscope_geometry.py`. Depth, tilt, field of view and the movement
+limits are all constants at the top of that second file. Imagine it as a cilinder
+of radius z onto which everything else is built --> every measure is in units 
+radii.
+
+**4. Complete.** The device is now locked in place, so you can insert the
+needle (imagine to do it lol) and do the injection by hand. Afterwards, 
+hold the pedal for 5 seconds to deflate the balloons. The app will then 
+tell you the device can be safely removed.
+
+If you need to go back a step, use Back in the left panel. All the
+timings and the threshold are constants at the top of
+`main_procedure.py`, so you can tweak them easily.
+
+## First time on the Windows PC
+
+Before anything else, run:
+
+```
+python joystick_diagnostic.py
+```
+
+Press X1 and X4 and note which `btnN` number shows up for each one. They
+need to match `BUTTON_X1` and `BUTTON_X4` at the top of the file
+`ui/xac_joystick_source.py`.

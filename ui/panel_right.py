@@ -1,16 +1,3 @@
-"""
-panel_right.py — RightPanel: fixed-width right sidebar.
-
-Trimmed down from the main app's ui/panel_right.py (RightSidePanel): keeps
-its core arrangement — a StepInstructionCard, the directional ButtonJoystick
-pad below it (visible only during the "Align" step, exactly like the real
-RightSidePanel gates its own button_joystick — see
-StepInstructionCard._update_button_joystick_visibility there), and a
-Confirm button pinned to the bottom — and drops the procedure-stage
-buttons (Init/Deploy/Align/Lock/Remove), since those exist to drive real
-hardware state.
-"""
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton
 

@@ -1,10 +1,20 @@
-# These are the packages this project needs to run.
+# These are all the packages that are necessary for the project to run.
 # Install them with:   pip install -r requirements.txt
 #
 # PyQt6 is the toolkit used to draw the window, the joystick, the buttons,
 # and the sliders. The other two are parts that PyQt6 needs and installs
-# automatically alongside it — you don't need to think about them.
+# automatically alongside it.
+#
+# pygame is the library I used to read the physical Xbox Adaptive Joystick 
+# (ui/xac_joystick_source.py and joystick_diagnostic.py).
+# 
+# pynput is another library listening for the foot pedal in the background, 
+# which behaves like a keyboard sending the "b" key (ui/foot_pedal_source.py).
+#
+# Versions used for the project on Mac (09-10/2026):
 
 PyQt6==6.9.1
 PyQt6-Qt6==6.9.2
 PyQt6_sip==13.10.2
+pygame==2.6.1
+pynput==1.7.7

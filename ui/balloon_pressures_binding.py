@@ -1,14 +1,4 @@
-"""
-balloon_pressures_binding.py — BalloonPressuresBinding: pushes
-MotionViewModel.pressures into a row of BalloonSlider widgets.
 
-The mirror image of JoystickBinding: where JoystickBinding forwards
-View -> ViewModel (user input driving the model), this binding forwards
-ViewModel -> View (model state driving the display). It does that by
-observing the viewmodel through the UpdateManager and reacting in
-on_invoked — the framework's phase-2 slot for side-effecting widget
-updates (see ObserverMixin / UpdateManager docstrings).
-"""
 
 from ui.balloon_slider import BalloonSlider
 from ui.framework.subject_observer import ObserverMixin

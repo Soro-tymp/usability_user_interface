@@ -1,22 +1,3 @@
-"""
-control_panel.py — ControlPanel: the toggleable panel below the camera
-view, opened/closed by LeftPanel's Control button.
-
-Trimmed down from the main app's ui/tabs_control.py (CommandPalette):
-that widget is a tab bar (Pressure / Demo / Joystick tabs); this demo
-folds its two relevant tabs' contents — the Translation and Rotation
-joysticks, and the 6 balloon-pressure gauges — into one always-visible
-row instead, since a full tab bar isn't needed to show what this demo is
-teaching. Hidden by default, exactly like CommandPalette is in
-ProcedurePage, until toggled.
-
-Two separate analog Joystick widgets, same as the real
-CommandPalette._create_joystick_tab: one drives translation, the other
-drives orientation ("Rotation" is the label the real app uses too, even
-though the mode string passed to JoystickBinding is "orientation" — see
-main_procedure.py).
-"""
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton
 

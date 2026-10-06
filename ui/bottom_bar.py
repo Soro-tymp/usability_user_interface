@@ -1,12 +1,3 @@
-"""
-bottom_bar.py — BottomBar: horizontal strip across the bottom of the
-window showing which procedure step is current.
-
-A much simpler stand-in for the main app's ui/bottom_bar.py (same name),
-which paints a dotted stage track with a custom QPainter. This just bolds
-and colors the current step's label among plain text labels — same idea
-(show progress across a fixed bar at the bottom), simpler implementation.
-"""
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel

@@ -7,14 +7,6 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 
 class GuiMarshaller(QObject):
-    """Runs a callable on the thread that owns this object (the GUI thread,
-    when constructed there). Calling the marshaller from any thread posts the
-    callable to the owning thread's event loop via a queued signal.
-
-    Reusable: call it as many times as you like. Arguments supplied at call
-    time are bound into the callable before dispatch.
-    """
-
     _invoke = pyqtSignal(object)  # carries a zero-arg callable
 
     def __init__(self, parent):

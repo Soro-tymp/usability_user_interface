@@ -1,11 +1,3 @@
-"""
-joystick.py — Custom analog joystick widget.
-
-Draws a draggable handle inside a base circle and emits normalized
-position signals for use in device control. Copied unmodified from the
-main app's ui/joystick.py.
-"""
-
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import pyqtSignal, QPointF, QSize, Qt
 from PyQt6.QtGui import QPainter, QPen, QBrush, QColor

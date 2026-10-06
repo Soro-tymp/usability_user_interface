@@ -1,8 +1,5 @@
 """
-styles.py — Minimal color palette for the joystick demo.
-
-Trimmed down from the main app's ui/styles.py: just the colors the
-Joystick and ButtonJoystick widgets need to draw themselves.
+Minimal color palette for the joystick demo.
 """
 
 
