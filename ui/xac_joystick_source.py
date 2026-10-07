@@ -49,8 +49,8 @@ AXIS_INVERT_Y = False
 # The number pygame gives to the X1 and X4 buttons. First guess:
 # check them with joystick_diagnostic.py and put here the "btnN" number
 # that lights up when you press each one.
-BUTTON_X1 = 0  # selects TRANSLATION
-BUTTON_X4 = 3  # selects ROTATION
+BUTTON_X1 = 2  # selects TRANSLATION
+BUTTON_X4 = 1  # selects ROTATION
 
 # A real stick never rests exactly at (0, 0) ---> worth creating a threshold for deadzone
 # to clear unwanted hardware noise 

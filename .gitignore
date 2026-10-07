@@ -1,1 +1,7 @@
 *.pyc
+
+# recorded sessions / analysis output / game high scores: never commit participant data
+sessions/
+sessions_summary.csv
+game_data/
+__pycache__/

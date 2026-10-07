@@ -78,6 +78,11 @@ class CameraPoseBinding(QObject):
         self._pitch = clamp(self._pitch + ovy * _ORIENTATION_UNITS_PER_SEC * dt)
         self._camera_view.set_pose(self._tx, self._ty, self._yaw, self._pitch)
 
+    def set_pose(self, tx=0.0, ty=0.0, yaw=0.0, pitch=0.0) -> None:
+        # Jump straight to a pose (new round: back to centre, or the game's random start)
+        self._tx, self._ty, self._yaw, self._pitch = tx, ty, yaw, pitch
+        self._camera_view.set_pose(tx, ty, yaw, pitch)
+
     def dispose(self) -> None:
         #Stop and detach from every source, called when closed
         self._timer.stop()

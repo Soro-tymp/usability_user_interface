@@ -108,3 +108,41 @@ python joystick_diagnostic.py
 Press X1 and X4 and note which `btnN` number shows up for each one. They
 need to match `BUTTON_X1` and `BUTTON_X4` at the top of the file
 `ui/xac_joystick_source.py`.
+## Game version (conference) and session recording
+
+```
+python main_procedure.py --game               # kids' game: timer, stars, top-10 board
+python main_procedure.py --participant P07    # clinician session tagged with a CODE (never a name)
+python analyze_sessions.py                    # all sessions -> sessions_summary.csv
+```
+
+**Game.** Pressing START asks the player's age (4–15, or "Grown-up"), which sets the
+level and the leaderboard group. In Align, gold stars appear on the eardrum: keep the
+cross on each star until its ring fills to collect it. Once all of them are collected the
+green zone lights up and can be locked with the pedal. Levels (all in `DIFFICULTIES`
+at the top of `ui/game_mode.py`):
+
+| Age group | Level  | Stars | Extra                                  |
+|-----------|--------|-------|----------------------------------------|
+| 4–7       | Easy   | 2     | big stars                              |
+| 8–11      | Medium | 3     | smaller stars                          |
+| 12–15     | Hard   | 4     | collect in numbered order, stars move  |
+| Grown-ups | Expert | 5     | in order, smaller, moving faster       |
+
+The timer starts with START and stops once the balloons are deflated, +3 s every time
+the cross touches the red zone (ossicles). Stars and a top-10 board **per age group**
+are saved in `game_data/highscores.json` (delete it to reset the boards). Every round
+starts from a random camera position with new star positions.
+
+Keys: **L** (or the 🏆 button) = leaderboard window with all age groups side by side:
+it opens on the second screen if there is one, **F11** inside it = full screen.
+**N** = new round (if a kid walks away), **F11** = game full screen, **Ctrl+Q** = quit
+(Esc is disabled in the game so kids can't close it).
+
+**Recording.** Every round (game or clinician) is saved as one file in `sessions/`,
+one event per line with a timestamp: step changes, pedal presses, Back, X1/X4
+switches, target/red zone entries, lock attempts and the camera path. `analyze_sessions.py`
+summarises them: time in each step, number of Back presses, cancelled locks,
+red-zone touches, steering path length, etc. (see the top of that file for the
+column list). `sessions/` and `game_data/` are in `.gitignore`, so participant data
+never ends up on GitHub.

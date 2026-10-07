@@ -17,8 +17,9 @@ set_pose().
 """
 
 import os
+import random
 
-from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal
+from PyQt6.QtCore import Qt, QPointF, QRectF, QTimer, pyqtSignal
 from PyQt6.QtGui import (QPainter, QPixmap, QColor, QPen, QPainterPath, QRadialGradient,
                          QBrush, QFont, QPolygonF, QTransform)
 from PyQt6.QtWidgets import QWidget, QSizePolicy
@@ -32,6 +33,16 @@ _TARGET_ZONE = (0.30, 0.61, 0.53, 0.79)  # the target zone on the eardrum image,
 # each from 0 to 1 across the image == it's a rectangle drawn roughly around the green dashed line,
 # so it isn't exact near the wedge's corners.
 
+# The red dashed zone on the image (ossicles = do NOT go there), traced by hand
+# from the 487x488 px image as (x, y) pixels --> divided by 487 below. Approximate!
+_DANGER_ZONE_PX = [(140, 183), (160, 140), (200, 110), (240, 95), (300, 95), (335, 115),
+                   (350, 155), (350, 175), (275, 178), (268, 190), (268, 260), (282, 290),
+                   (270, 318), (250, 323), (232, 310), (228, 290), (232, 265), (225, 230),
+                   (212, 205), (212, 185), (195, 180)]
+_DANGER_ZONE = QPolygonF([QPointF(x / 487.0, y / 487.0) for x, y in _DANGER_ZONE_PX])
+
+_CROSS_COLOR_DANGER = QColor("#FF4D4D")
+_CONFETTI_COLORS = ["#FFC83D", "#5EDA94", "#2B9DA1", "#FF6B9A", "#8E7CFF", "#FFFFFF"]
 _CROSS_COLOR_OFF_TARGET = QColor(255, 255, 255, 210) # slightly see-through white
 _CROSS_COLOR_ON_TARGET = QColor("#5EDA94")  # matches the green 
 _WALL_COLOR = (205, 164, 142)               # skin colour
@@ -58,6 +69,8 @@ class CameraView(QWidget):
     # sent when the cross moves onto the target (True) or off it (False).
     # main_procedure.py only allows LOCK while it's True.
     onTargetChanged = pyqtSignal(bool)
+    # same thing for the red zone (True = the cross just went onto it)
+    onDangerChanged = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -65,6 +78,17 @@ class CameraView(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._pose = geo.Pose()
         self._drum = self._load_drum_pixmap()
+        self.target_zone = _TARGET_ZONE
+        self.show_pose_readout = True    # the small shift/tilt numbers, hidden in the game
+        self.show_danger = False         # red cross on the red zone (game only, it's always recorded)
+        self.target_enabled = True       # game: the green zone only counts once all stars are collected
+        # optional function(painter, image_width, image_height) drawing extra things ON the
+        # eardrum, in the image's own pixels (the game's stars)
+        self.drum_overlay = None
+        self._confetti = []              # [x, y, vx, vy, colour] in pixels
+        self._confetti_timer = QTimer(self)
+        self._confetti_timer.setInterval(30)
+        self._confetti_timer.timeout.connect(self._on_confetti_tick)
 
     @staticmethod
     def _load_drum_pixmap() -> QPixmap:
@@ -85,22 +109,69 @@ class CameraView(QWidget):
     def set_pose(self, tx: float, ty: float, yaw: float, pitch: float) -> None:
         #called by camera_pose_binding.py each time a joystick moves ---> muove la cam (-1 1) e redraws
         was_on_target = self.is_on_target()
+        was_in_danger = self.is_in_danger()
         self._pose = geo.Pose(tx, ty, yaw, pitch)
         self.update()
         now_on_target = self.is_on_target() # send it when it actually changes and not 4 every small movement
         if now_on_target != was_on_target:
             self.onTargetChanged.emit(now_on_target)
+        now_in_danger = self.is_in_danger()
+        if now_in_danger != was_in_danger:
+            self.onDangerChanged.emit(now_in_danger)
+
+    @property
+    def pose(self) -> tuple[float, float, float, float]:
+        p = self._pose
+        return p.tx, p.ty, p.yaw, p.pitch
 
     def set_crosshair_position(self, x: float, y: float) -> None:
         # just slides camera sideways
         self.set_pose(x, y, self._pose.yaw, self._pose.pitch)
 
     def is_on_target(self) -> bool:
-        uv = geo.aim_uv(self._pose)
+        return self.target_enabled and self.uv_on_target(geo.aim_uv(self._pose))
+
+    def set_target_enabled(self, enabled: bool) -> None:
+        was_on_target = self.is_on_target()
+        self.target_enabled = enabled
+        self.update()
+        if self.is_on_target() != was_on_target:
+            self.onTargetChanged.emit(self.is_on_target())
+
+    def is_in_danger(self) -> bool:
+        return self.uv_in_danger(geo.aim_uv(self._pose))
+
+    def uv_on_target(self, uv) -> bool:
         if uv is None:
             return False
-        u0, v0, u1, v1 = _TARGET_ZONE
+        u0, v0, u1, v1 = self.target_zone
         return u0 <= uv[0] <= u1 and v0 <= uv[1] <= v1
+
+    @staticmethod
+    def uv_in_danger(uv) -> bool:
+        if uv is None:
+            return False
+        return _DANGER_ZONE.containsPoint(QPointF(*uv), Qt.FillRule.OddEvenFill)
+
+    # CONFETTI (game mode, end of a round)
+
+    def celebrate(self) -> None:
+        w = max(1, self.width())
+        self._confetti = [[random.uniform(0, w), random.uniform(-80, 0),
+                           random.uniform(-90, 90), random.uniform(0, 120),
+                           QColor(random.choice(_CONFETTI_COLORS))] for _ in range(120)]
+        self._confetti_timer.start()
+
+    def _on_confetti_tick(self) -> None:
+        dt = self._confetti_timer.interval() / 1000.0
+        for c in self._confetti:
+            c[3] += 400 * dt          # gravity
+            c[0] += c[2] * dt
+            c[1] += c[3] * dt
+        self._confetti = [c for c in self._confetti if c[1] < self.height() + 10]
+        if not self._confetti:
+            self._confetti_timer.stop()
+        self.update()
 
     # DRAWING
 
@@ -146,6 +217,9 @@ class CameraView(QWidget):
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
                 painter.setTransform(transform, True)
                 painter.drawPixmap(0, 0, self._drum)
+                if self.drum_overlay is not None:
+                    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                    self.drum_overlay(painter, self._drum.width(), self._drum.height())
                 painter.restore()
 
         # 2) Canal walls, far --> near (nearer patches cover farther ones) + smoothing turned off
@@ -172,7 +246,12 @@ class CameraView(QWidget):
         # 4) Fixed cross: two diameters line showing inside circle + a small ring at the aim point
         # green on target, white otherwise
         on_target = self.is_on_target()
-        color = _CROSS_COLOR_ON_TARGET if on_target else _CROSS_COLOR_OFF_TARGET
+        if on_target:
+            color = _CROSS_COLOR_ON_TARGET
+        elif self.show_danger and self.is_in_danger():
+            color = _CROSS_COLOR_DANGER
+        else:
+            color = _CROSS_COLOR_OFF_TARGET
         painter.setPen(QPen(color, 2))
         painter.drawLine(QPointF(center.x() - radius, center.y()),
                          QPointF(center.x() + radius, center.y()))
@@ -196,6 +275,10 @@ class CameraView(QWidget):
         painter.setPen(color if on_target else QColor("#BBBBBB"))
         painter.drawText(QRectF(8, 6, 260, 20), Qt.AlignmentFlag.AlignLeft,
                          "ENDOSCOPE  •  ON TARGET" if on_target else "ENDOSCOPE")
+        for x, y, _vx, _vy, c in self._confetti:
+            painter.fillRect(QRectF(x, y, 7, 11), c)
+        if not self.show_pose_readout:
+            return
         font.setBold(False)
         font.setPointSize(9)
         painter.setFont(font)
