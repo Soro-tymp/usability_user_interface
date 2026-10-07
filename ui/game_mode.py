@@ -2,7 +2,7 @@
 Everything specific to the conference GAME version (python main_procedure.py --game).
 The procedure itself is the same as the clinician one, only:
   - pressing START asks the player's age --> picks the level and the leaderboard
-  - shorter holds/countdowns (kids from 4 to 15 years old, + grown-ups)
+  - shorter holds/countdowns (kids from 2 to 18 years old, + grown-ups)
   - in Align, STARS appear on the eardrum: keep the cross on each one to
     collect it. Only when they're all collected does the green zone light up
     and the device can be locked. Older players get more, smaller stars, that
@@ -42,12 +42,13 @@ HIGHSCORE_SIZE = 10
 
 # (id saved in the files, label on screen, min age, max age, difficulty)
 AGE_GROUPS = [
-    ("4-7", "Ages 4–7", 4, 7, "easy"),
+    ("2-7", "Ages 2–7", 2, 7, "easy"),
     ("8-11", "Ages 8–11", 8, 11, "medium"),
-    ("12-15", "Ages 12–15", 12, 15, "hard"),
-    ("adult", "Grown-ups", 16, 200, "expert"),
+    ("12-18", "Ages 12–18", 12, 18, "hard"),
+    ("adult", "Grown-ups", 19, 200, "expert"),
 ]
-ADULT_AGE = 16   # what the "Grown-up" button records
+MIN_AGE, MAX_AGE = 2, 18   # one button per age, plus "Grown-up"
+ADULT_AGE = 19             # what the "Grown-up" button records (= 19 or older)
 
 # Levels. radius = star size on the eardrum image (0..1 = whole image width),
 # dwell_s = how long the cross must stay on a star to collect it,
@@ -454,11 +455,11 @@ class AgeDialog(QDialog):
 
         grid = QGridLayout()
         grid.setSpacing(10)
-        for k, age in enumerate(range(4, 16)):
+        for k, age in enumerate(range(MIN_AGE, MAX_AGE + 1)):
             button = QPushButton(str(age))
             button.setAutoDefault(False)
             button.clicked.connect(lambda _=False, a=age: self._pick(a))
-            grid.addWidget(button, k // 4, k % 4)
+            grid.addWidget(button, k // 6, k % 6)
         layout.addLayout(grid)
 
         adult = QPushButton("Grown-up 🧑")

@@ -116,7 +116,7 @@ python main_procedure.py --participant P07    # clinician session tagged with a 
 python analyze_sessions.py                    # all sessions -> sessions_summary.csv
 ```
 
-**Game.** Pressing START asks the player's age (4–15, or "Grown-up"), which sets the
+**Game.** Pressing START asks the player's age (2–18, or "Grown-up"), which sets the
 level and the leaderboard group. In Align, gold stars appear on the eardrum: keep the
 cross on each star until its ring fills to collect it. Once all of them are collected the
 green zone lights up and can be locked with the pedal. Levels (all in `DIFFICULTIES`
@@ -124,10 +124,15 @@ at the top of `ui/game_mode.py`):
 
 | Age group | Level  | Stars | Extra                                  |
 |-----------|--------|-------|----------------------------------------|
-| 4–7       | Easy   | 2     | big stars                              |
+| 2–7       | Easy   | 2     | big stars                              |
 | 8–11      | Medium | 3     | smaller stars                          |
-| 12–15     | Hard   | 4     | collect in numbered order, stars move  |
+| 12–18     | Hard   | 4     | collect in numbered order, stars move  |
 | Grown-ups | Expert | 5     | in order, smaller, moving faster       |
+
+Below the camera, a cartoon of the robot (`ui/robot_view.py`) shows it in the ear
+canal from the side and from the end: the 6 balloons follow the same pressures as the
+P1–P6 sliders, the robot shifts/tilts with the joysticks, slides in at the start, shows
+the needle once locked and slides out at the end.
 
 The timer starts with START and stops once the balloons are deflated, +3 s every time
 the cross touches the red zone (ossicles). Stars and a top-10 board **per age group**

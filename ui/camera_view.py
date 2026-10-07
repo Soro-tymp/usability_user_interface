@@ -71,6 +71,8 @@ class CameraView(QWidget):
     onTargetChanged = pyqtSignal(bool)
     # same thing for the red zone (True = the cross just went onto it)
     onDangerChanged = pyqtSignal(bool)
+    # every new camera pose (tx, ty, yaw, pitch), e.g. for the robot cartoon
+    poseChanged = pyqtSignal(float, float, float, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -112,6 +114,7 @@ class CameraView(QWidget):
         was_in_danger = self.is_in_danger()
         self._pose = geo.Pose(tx, ty, yaw, pitch)
         self.update()
+        self.poseChanged.emit(*self.pose)
         now_on_target = self.is_on_target() # send it when it actually changes and not 4 every small movement
         if now_on_target != was_on_target:
             self.onTargetChanged.emit(now_on_target)

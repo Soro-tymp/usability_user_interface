@@ -153,6 +153,7 @@ class ProcedureWindow(QMainWindow):
         self._inflate_level = 0.0
         self._deflate_from: list[float] = []
         self._deflate_elapsed = 0.0
+        self._last_tick = 0.0             # time.monotonic() of the last inflate/deflate tick
         self._countdown_left = 0
 
         self.setWindowTitle("SoroTymp — pedal + joystick procedure demo")
@@ -262,8 +263,11 @@ class ProcedureWindow(QMainWindow):
         self._deflate_timer.timeout.connect(self._on_deflate_tick)
 
         # ViewModel -> View: pressures into the 6 gauges.
+        self.robot_view = self.control_panel.robot_view
         self._balloon_binding = BalloonPressuresBinding(
-            self.viewmodel, self.control_panel.balloon_sliders)
+            self.viewmodel, self.control_panel.balloon_sliders, self.robot_view)
+        self.camera_view.poseChanged.connect(self.robot_view.set_pose)
+        self.camera_view.onTargetChanged.connect(self.robot_view.set_on_target)
         self._balloon_binding.on_invoked()
 
         self.left_panel.btn_back.clicked.connect(self._retreat_step)
@@ -291,6 +295,8 @@ class ProcedureWindow(QMainWindow):
             self.camera_view.show_pose_readout = False
             self.camera_view.show_danger = True
             self.camera_view.drum_overlay = self._paint_stars
+            self.robot_view.setVisible(True)
+            self.control_panel.setFixedHeight(250)
             # Stars: they move and pulse, so the game ticks continuously
             self._game_tick_last = time.monotonic()
             self._game_tick = QTimer(self)
@@ -343,6 +349,7 @@ class ProcedureWindow(QMainWindow):
         self.right_panel.btn_confirm.setEnabled(stage == STAGE_INSERT)# confirm usato solo come firsr step, poi usuamo pedale
         self.left_panel.btn_back.setEnabled(stage > STAGE_INSERT and not self._finished)#back non fa nulla nel primo step e alla fine quando abbiamo finito tutto 
         self.bottom_bar.set_current_index(stage)
+        self._update_robot_animation()
 
         #Update
         self._show_default_banner()
@@ -351,6 +358,19 @@ class ProcedureWindow(QMainWindow):
     def _t(self, clinical: str, game: str) -> str:
         # Picks the clinician or the kid-friendly text
         return game if self._game else clinical
+
+    def _update_robot_animation(self) -> None:
+        # Robot cartoon: waiting at the entrance in Insert, inside the ear
+        # afterwards, needle out while locked, slides out once finished.
+        if self._finished:
+            self.robot_view.set_insertion(0.0)
+            self.robot_view.set_needle(0.0)
+        elif self._stage == STAGE_INSERT:
+            self.robot_view.set_insertion(0.15)
+            self.robot_view.set_needle(0.0)
+        else:
+            self.robot_view.set_insertion(1.0)
+            self.robot_view.set_needle(1.0 if self._locked else 0.0)
 
     def _show_default_banner(self) -> None:
         # The banner sets the "resting" message for each step. Mentre premiamo pedale,
@@ -506,6 +526,7 @@ class ProcedureWindow(QMainWindow):
                 return  # threshold already reached, waiting for Align
             # ricomincia ancora da questo livello non da zero, mi sembra piu pratico cosi
             self._inflate_level = max(self.viewmodel.pressures)
+            self._last_tick = time.monotonic()
             self._inflate_timer.start()
             self.status_banner.show_message(self._t(
                 "Inflating…", "Inflating… keep holding! 🎈"), "active")
@@ -571,7 +592,11 @@ class ProcedureWindow(QMainWindow):
         # Runs every TICK_MS while the pedal is held in Inflate.
         # Each tick adds a small step, so pressure goes up at
         # INFLATE_RATE_PER_SEC, and never goes past the threshold.
-        step = self._inflate_rate * (TICK_MS / 1000.0)
+        # real elapsed time, not TICK_MS: when the computer is busy drawing,
+        # ticks arrive late and inflation would get slower (unfair timings)
+        now = time.monotonic()
+        step = self._inflate_rate * (now - self._last_tick)
+        self._last_tick = now
         self._inflate_level = min(INFLATION_THRESHOLD, self._inflate_level + step)
         self.viewmodel.inflate(self._inflate_level)
         if self._inflate_level >= INFLATION_THRESHOLD:
@@ -658,13 +683,17 @@ class ProcedureWindow(QMainWindow):
         self._deflate_from = list(self.viewmodel.pressures)
         self._deflate_elapsed = 0.0
         self._log("deflate_confirmed")
+        self.robot_view.set_needle(0.0)   # needle back in before the balloons go down
         self.status_banner.set_progress(None)
         self.status_banner.show_message(self._t(
             "Deflating…", "Letting the air out… 💨"), "active")
+        self._last_tick = time.monotonic()
         self._deflate_timer.start()
 
     def _on_deflate_tick(self) -> None: #lower all baloons together in a straight line
-        self._deflate_elapsed += TICK_MS / 1000.0
+        now = time.monotonic()
+        self._deflate_elapsed += now - self._last_tick   # real time, see _on_inflate_tick
+        self._last_tick = now
         fraction = min(1.0, self._deflate_elapsed / DEFLATE_RAMP_SECONDS)
         self.viewmodel.set_pressures(
             [p * (1.0 - fraction) for p in self._deflate_from])
@@ -719,6 +748,8 @@ class ProcedureWindow(QMainWindow):
                   "deflate_hold_s": self._deflate_hold_s,
                   "start_pose": [round(v, 4) for v in start_pose]})
         self._last_logged_pose = None
+        self.robot_view.set_insertion(0.0, animate=False)
+        self.robot_view.set_needle(0.0, animate=False)
         self._crosshair_binding.set_pose(*start_pose)
         # where the cross starts (set_pose only reports CHANGES of target/red zone)
         self._log("start_state", on_target=self.camera_view.is_on_target(),

@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButt
 from ui.balloon_slider import BalloonSlider
 from ui.joystick import Joystick
 from ui.motion_controller import NUM_CHANNELS
+from ui.robot_view import RobotView
 
 
 class ControlPanel(QWidget):
@@ -38,6 +39,12 @@ class ControlPanel(QWidget):
         joysticks_col.addWidget(self.btn_reset)
         layout.addLayout(joysticks_col)
 
+        # cartoon of the robot, balloons linked to the same pressures as the sliders
+        # (hidden by default, main_procedure.py shows it in the game)
+        self.robot_view = RobotView()
+        self.robot_view.setVisible(False)
+        layout.addWidget(self.robot_view, 3)
+
         balloons_col = QVBoxLayout()
         balloons_col.addWidget(self._label("Balloon pressures (live)"))
         balloons_row = QHBoxLayout()
@@ -45,7 +52,7 @@ class ControlPanel(QWidget):
         for slider in self.balloon_sliders:
             balloons_row.addWidget(slider)
         balloons_col.addLayout(balloons_row, 1)
-        layout.addLayout(balloons_col, 1)
+        layout.addLayout(balloons_col, 2)
 
     @staticmethod
     def _label(text: str) -> QLabel:
