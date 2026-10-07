@@ -129,10 +129,20 @@ at the top of `ui/game_mode.py`):
 | 12–18     | Hard   | 4     | collect in numbered order, stars move  |
 | Grown-ups | Expert | 5     | in order, smaller, moving faster       |
 
-Below the camera, a cartoon of the robot (`ui/robot_view.py`) shows it in the ear
-canal from the side and from the end: the 6 balloons follow the same pressures as the
-P1–P6 sliders, the robot shifts/tilts with the joysticks, slides in at the start, shows
-the needle once locked and slides out at the end.
+Below the camera, a drawing of the robot (`ui/robot_view.py`) shows it in the ear
+canal from the side, plus the front and back balloon rings seen from the end. It is
+drawn **to scale** from the sizes in millimetres at the top of that file (canal 7.5 x 25 mm;
+the robot's sizes are guesses: replace them with the real device's). The balloons are round;
+the back ones (P4–P6) sit in between the front ones (P1–P3), every 60° around the robot. The
+**front ring is P1–P3 (teal)** and the **back ring P4–P6 (orange)**, same colours as the
+slider handles. The balloons grow until they touch the canal wall at the inflation
+threshold and then always stay in contact (squashed on one side when the robot moves);
+the colour shows the pressure and a balloon glows white while its pressure changes.
+The robot shifts with translation and tilts with rotation (front and back rings move
+opposite ways), slides in at the start, shows the needle once locked and slides out at the end.
+
+On the right, the step explanations are shown big, in two parts: "🤖 The robot"
+(what the real device does, for parents to explain) and "🎮 Your turn" (what to do).
 
 The timer starts with START and stops once the balloons are deflated, +3 s every time
 the cross touches the red zone (ossicles). Stars and a top-10 board **per age group**

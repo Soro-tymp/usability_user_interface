@@ -70,6 +70,12 @@ DIFFICULTIES = {
 # (DRUM_HALF_SIZE 1.15 vs canal radius 1), so beyond ~0.43 it's hidden by the walls.
 VISIBLE_DISK = (0.5, 0.5, 0.40)
 
+# right panel in the game (big step explanations): narrower on small screens,
+# so the robot cartoon and the sliders still fit below the camera
+EXPLANATION_PANEL_WIDTH = 400
+EXPLANATION_PANEL_WIDTH_SMALL = 290
+SMALL_SCREEN_WIDTH = 1600
+
 HIGHSCORES_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                                "game_data", "highscores.json")
 
@@ -80,19 +86,29 @@ STEP_TITLES = [
     "3. Collect the stars ⭐",
     "4. Give the medicine 💉",
 ]
-# Step card text: for the parents to read out, and explains what the real robot does.
+# Step card text (rich text, shown big on the right): what the real robot does,
+# for the parents to explain, and what the player has to do.
+_ROBOT = "<p style='color:#9FE3E6'><b>🤖 The robot</b><br>{}</p>"
+_YOU = "<p style='color:#FFE08A'><b>🎮 Your turn</b><br>{}</p>"
 STEP_BODIES = [
-    "Doctors gently slide a tiny soft robot into the ear.\n\n"
-    "Press START to begin. Be quick, you're being timed!",
-    "Little balloons on the robot fill with air so it stays still, "
-    "like a gentle hug inside the ear.\n\n"
-    "HOLD the pedal down until they're full.",
-    "The camera on the robot shows the eardrum.\n\n"
-    "Use the joystick and keep the cross on each STAR ⭐ to collect it.\n\n"
-    "Then aim at the GREEN zone (the safe place for the medicine) and HOLD the pedal.\n\n"
-    "RED = tiny ear bones, don't touch them!",
-    "The robot is locked, so the doctor can give the medicine through "
-    "the eardrum.\n\nHOLD the pedal to let the air out of the balloons. Finished!",
+    _ROBOT.format("Doctors gently slide a tiny, soft robot into the ear canal.")
+    + _YOU.format("Press <b>START</b> and tell us how old you are.<br>"
+                  "Be quick, you're timed! ⏱️"),
+    _ROBOT.format("6 little balloons fill with air until they touch the walls of the ear: "
+                  "the robot holds still, like a gentle hug 🤗<br>"
+                  "Look below 👇 <span style='color:#5FD3D7'><b>front</b></span> and "
+                  "<span style='color:#F5A65B'><b>back</b></span> balloons.")
+    + _YOU.format("<b>HOLD the pedal</b> 🦶 until the balloons are full."),
+    _ROBOT.format("The balloons push the robot to move it, softly. Its camera "
+                  "shows the eardrum.")
+    + _YOU.format("Move the joystick 🕹️ and keep the cross on each ⭐ to collect it.<br>"
+                  "Then aim at the <b style='color:#5EDA94'>GREEN</b> zone and "
+                  "<b>HOLD the pedal</b>.<br>"
+                  "⚠️ Avoid the <b style='color:#FF6B6B'>RED</b>: tiny ear bones!"),
+    _ROBOT.format("Locked in place, so the doctor can give the medicine 💉 through "
+                  "the eardrum, very precisely.")
+    + _YOU.format("<b>HOLD the pedal</b> 🦶 to let the air out of the balloons. "
+                  "Then the robot comes out!"),
 ]
 
 

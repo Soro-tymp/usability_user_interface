@@ -34,24 +34,7 @@ class BalloonSlider(QWidget):
             convert_pressure_to_slider_int(min_pressure),
             convert_pressure_to_slider_int(max_pressure),
         )
-        self.slider.setStyleSheet("""
-            QSlider::groove:vertical {
-                border: 1px solid #999999;
-                width: 12px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #B1B1B1, stop:1 #c4c4c4);
-                margin: 2px 0;
-            }
-            QSlider::handle:vertical {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #20B2AA, stop:1 #008B8B);
-                border: 1px solid #006666;
-                height: 18px;
-                width: 18px;
-                margin: 0 -3px;
-                border-radius: 9px;
-            }
-        """)
+        self.set_handle_color("#20B2AA", "#008B8B", "#006666")
 
         self.value_label = QLabel()
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -61,6 +44,27 @@ class BalloonSlider(QWidget):
         layout.addWidget(title)
         layout.addWidget(self.slider, 1)
         layout.addWidget(self.value_label)
+
+    def set_handle_color(self, light: str, dark: str, border: str) -> None:
+        # the game colours P1-P3 / P4-P6 like the front / back balloons of the robot cartoon
+        self.slider.setStyleSheet(f"""
+            QSlider::groove:vertical {{
+                border: 1px solid #999999;
+                width: 12px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #B1B1B1, stop:1 #c4c4c4);
+                margin: 2px 0;
+            }}
+            QSlider::handle:vertical {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {light}, stop:1 {dark});
+                border: 1px solid {border};
+                height: 18px;
+                width: 18px;
+                margin: 0 -3px;
+                border-radius: 9px;
+            }}
+        """)
 
     def _on_value_changed(self, value: int):
         self.value_label.setText(f"{convert_pressure_slider_int_to_pressure(value):.2f}")

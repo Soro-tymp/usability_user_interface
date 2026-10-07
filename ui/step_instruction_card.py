@@ -40,6 +40,16 @@ class StepInstructionCard(QWidget):
             f"font-size: 10pt; color: {COLOR_TEXT_PRIMARY}; border: none;")
         layout.addWidget(self._body_label)
 
+    def set_large(self) -> None:
+        # Game: big text, for kids and parents to read from a distance
+        self._title_label.setStyleSheet(
+            f"font-size: 22pt; font-weight: 800; color: {COLOR_TEXT_PRIMARY}; border: none;")
+        self._body_label.setStyleSheet(
+            f"font-size: 15pt; color: {COLOR_TEXT_PRIMARY}; border: none;")
+        self._body_label.setTextFormat(Qt.TextFormat.RichText)
+        self._body_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self._body_label.setMinimumHeight(320)
+
     def set_content(self, title: str, body: str) -> None:
         self._title_label.setText(title)
         self._body_label.setText(body)

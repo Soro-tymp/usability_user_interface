@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButt
 from ui.balloon_slider import BalloonSlider
 from ui.joystick import Joystick
 from ui.motion_controller import NUM_CHANNELS
-from ui.robot_view import RobotView
+from ui.robot_view import RobotView, ring_color
 
 
 class ControlPanel(QWidget):
@@ -53,6 +53,13 @@ class ControlPanel(QWidget):
             balloons_row.addWidget(slider)
         balloons_col.addLayout(balloons_row, 1)
         layout.addLayout(balloons_col, 2)
+
+    def show_robot(self) -> None:
+        # Game: robot cartoon + slider handles in the colours of its balloon rings
+        self.robot_view.setVisible(True)
+        for i, slider in enumerate(self.balloon_sliders):
+            color = ring_color(i)
+            slider.set_handle_color(color.lighter(125).name(), color.name(), color.darker(150).name())
 
     @staticmethod
     def _label(text: str) -> QLabel:

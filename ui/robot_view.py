@@ -1,51 +1,91 @@
 """
 A cartoon of the robot in the ear canal, animated live from the same
 data as the rest of the screen:
-  - the 6 balloons follow the 6 pressures (same values as the P1..P6 sliders)
-  - the robot shifts/tilts with the camera pose (the joysticks)
-  - it slides in when the procedure starts, shows the needle once locked,
-    and slides out at the end (set_insertion / set_needle, eased smoothly)
+  - 2 rings of 3 balloons: FRONT ring (P1-P3, near the tip, teal) and BACK
+    ring (P4-P6, orange), same colours as the slider handles
+  - front balloons at 0°, 120°, 240° and back balloons in between, at 60°, 180°,
+    300° (angle 0 = right, y pointing down like the joystick)
+  - the balloons are round, filling the space between the robot and the wall
+  - while inflating, the balloons grow until they touch the canal wall at the
+    inflation threshold. After that (set_seated(True)) they always touch the
+    wall: when the robot moves, the ones on one side get squashed and the ones on
+    the other side stretched, and the pressure shows as how deep the colour is
+  - a balloon whose pressure is changing glows white, so you can see which
+    balloons are doing the work
+  - the robot shifts/tilts with the camera pose: translation moves both rings
+    the same way, rotation moves the front ring one way and the back ring the
+    other way (= tilt)
+  - the robot is just a short head with the 2 rings, followed by thin tubes/wires
+    (air for the front ring, air for the back ring, camera cable) going out of the ear
+  - it slides in when the procedure starts, shows the needle once locked, and
+    slides out at the end (set_insertion / set_needle, eased smoothly)
 
-Two drawings side by side:
-  - SIDE VIEW (left): ear canal cut lengthwise, entrance on the left, eardrum on
-    the right. The balloon ring sits behind the tip, balloons at the back
-    are drawn darker.
-  - END VIEW (right): looking down the canal from outside. Balloon i sits at
-    i*60° around the robot (same layout as MotionController.kinematics_from_drag:
-    angle 0 = right, y pointing down like the joystick), numbered 1..6 like
-    the sliders. Bigger + more saturated = higher pressure.
+Drawings: SIDE VIEW (left, canal cut lengthwise, entrance on the left, eardrum on the
+right) and two END VIEWS (right, looking down the canal: front ring and back ring).
 
-NB: it's a cartoon, the proportions are not the real device's.
+SCALE: everything is drawn from the sizes in millimetres below (canal and robot),
+so the proportions are real. The robot ones are GUESSES: put the real device's here.
 """
 
 import math
 
 from PyQt6.QtCore import Qt, QPointF, QRectF, QTimer
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPainterPath, QLinearGradient
+from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QPainterPath, QLinearGradient, QBrush
 from PyQt6.QtWidgets import QWidget, QSizePolicy
 
 from ui.motion_controller import NUM_CHANNELS
 from ui.styles import COLOR_TEXT_SECONDARY
 
+FRONT_COLOR = QColor("#1E9EA3")     # balloons P1-P3
+BACK_COLOR = QColor("#F08A24")      # balloons P4-P6
+# Around the robot (angle 0 = right, y down like the joystick). The back balloons sit
+# IN BETWEEN the front ones: seen from the end, the 6 alternate front/back every 60°.
+FRONT_ANGLES_DEG = (0.0, 120.0, 240.0)    # P1, P2, P3
+BACK_ANGLES_DEG = (60.0, 180.0, 300.0)    # P4, P5, P6
+
+
+def balloon_angle(index: int) -> float:
+    return (FRONT_ANGLES_DEG + BACK_ANGLES_DEG)[index]
+
 _TICK_MS = 30
 _EASE = 0.12                        # fraction of the remaining distance covered per tick
+_GLOW_DECAY = 0.06                  # per tick
 _SKIN = QColor(205, 164, 142)
 _SKIN_DARK = QColor(150, 105, 88)
 _CANAL = QColor(70, 45, 40)
 _DRUM = QColor(235, 200, 190)
 _BODY = QColor("#D8DEE3")
 _BODY_EDGE = QColor("#7C8790")
-_BALLOON_EMPTY = QColor("#9FD9DB")
-_BALLOON_FULL = QColor("#1E9EA3")
 _TARGET_GREEN = QColor("#5EDA94")
-_MAX_TILT_DEG = 12.0                # robot tilt drawn at full yaw/pitch
+# REAL SIZES (mm). Ear canal: average adult. Robot: guesses, replace with the device's.
+CANAL_DIAMETER_MM = 7.5
+CANAL_LENGTH_MM = 25.0
+ROBOT_DIAMETER_MM = 3.0
+ROBOT_LENGTH_MM = 8.5          # from the tip to the back of the head (the wires start there)
+TIP_TO_FRONT_RING_MM = 2.4     # tip -> centre of the front balloon ring
+TIP_TO_BACK_RING_MM = 6.4      # tip -> centre of the back balloon ring
+BALLOON_LENGTH_MM = 2.8        # balloon size along the canal, when inflated
+WIRE_DIAMETER_MM = 0.35
+CAMERA_DISTANCE_MM = 4.0       # how close the tip gets to the eardrum
+MIN_CANAL_SHOWN = 0.6          # narrow screens: show at least this inner part of the canal, bigger
+ROBOT_SIZE = ROBOT_DIAMETER_MM / CANAL_DIAMETER_MM   # robot radius / canal radius
+_SHIFT = 0.20                       # ring offset at full translation (x canal radius)
+_TILT = 0.05                        # extra ring offset at full rotation (front +, back -)
+_WIRE_COLORS = (QColor("#1E9EA3"), QColor("#F08A24"), QColor("#8A949C"))  # front air, back air, camera
 
 
-def _mix(a: QColor, b: QColor, f: float) -> QColor:
-    f = max(0.0, min(1.0, f))
-    return QColor(int(a.red() + (b.red() - a.red()) * f),
-                  int(a.green() + (b.green() - a.green()) * f),
-                  int(a.blue() + (b.blue() - a.blue()) * f))
+def ring_color(index: int) -> QColor:
+    return FRONT_COLOR if index < 3 else BACK_COLOR
+
+
+def _pressure_color(index: int, p: float) -> QColor:
+    # light tint of the ring colour at 0 (still tells front from back), full colour at 1
+    base = ring_color(index)
+    pale = QColor(240, 242, 242)
+    f = 0.25 + 0.75 * max(0.0, min(1.0, p))
+    return QColor(int(pale.red() + (base.red() - pale.red()) * f),
+                  int(pale.green() + (base.green() - pale.green()) * f),
+                  int(pale.blue() + (base.blue() - pale.blue()) * f))
 
 
 class RobotView(QWidget):
@@ -54,8 +94,11 @@ class RobotView(QWidget):
         self.setMinimumSize(260, 150)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._pressures = [0.0] * NUM_CHANNELS
+        self._glow = [0.0] * NUM_CHANNELS
         self._pose = (0.0, 0.0, 0.0, 0.0)
         self._on_target = False
+        self._seated = False             # True once inflated: balloons touch the wall
+        self.contact_level = 0.7         # pressure at which they first touch it
         # current value / where it's going (eased every tick)
         self._insertion, self._insertion_target = 0.0, 0.0
         self._needle, self._needle_target = 0.0, 0.0
@@ -66,8 +109,11 @@ class RobotView(QWidget):
     # inputs
 
     def set_pressures(self, pressures) -> None:
+        for i, p in enumerate(pressures):
+            if abs(p - self._pressures[i]) > 0.002:
+                self._glow[i] = 1.0
         self._pressures = list(pressures)
-        self.update()
+        self._kick()
 
     def set_pose(self, tx: float, ty: float, yaw: float, pitch: float) -> None:
         self._pose = (tx, ty, yaw, pitch)
@@ -75,6 +121,10 @@ class RobotView(QWidget):
 
     def set_on_target(self, on_target: bool) -> None:
         self._on_target = on_target
+        self.update()
+
+    def set_seated(self, seated: bool) -> None:
+        self._seated = seated
         self.update()
 
     def set_insertion(self, value: float, animate: bool = True) -> None:
@@ -105,9 +155,28 @@ class RobotView(QWidget):
                 done = False
             else:
                 setattr(self, name, target)
+        for i, g in enumerate(self._glow):
+            if g > 0:
+                self._glow[i] = max(0.0, g - _GLOW_DECAY)
+                done = False
         if done:
             self._timer.stop()
         self.update()
+
+    # geometry shared by both views
+
+    def _ring_offsets(self) -> dict:
+        # where each ring's centre sits in the canal cross-section (x, y), in
+        # canal radii: translation moves both, rotation moves them opposite ways
+        tx, ty, yaw, pitch = self._pose
+        return {"front": (tx * _SHIFT + yaw * _TILT, ty * _SHIFT + pitch * _TILT),
+                "back": (tx * _SHIFT - yaw * _TILT, ty * _SHIFT - pitch * _TILT)}
+
+    def _fill(self, p: float) -> float:
+        # how much of the gap to the wall a balloon fills (1 = touching)
+        if self._seated:
+            return 1.0
+        return max(0.0, min(1.0, p / self.contact_level))
 
     # drawing
 
@@ -115,157 +184,225 @@ class RobotView(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
-        end_size = min(h - 18, w * 0.30)
-        side_rect = QRectF(0, 16, w - end_size - 14, h - 18)
-        end_rect = QRectF(w - end_size, 16 + (h - 18 - end_size) / 2, end_size, end_size)
+        end_size = min((h - 34) / 2, w * 0.22)
+        side_rect = QRectF(0, 16, w - end_size - 16, h - 18)
+        front_rect = QRectF(w - end_size - 4, 16, end_size, end_size)
+        back_rect = QRectF(w - end_size - 4, h - end_size - 2, end_size, end_size)
 
-        painter.setPen(QColor(COLOR_TEXT_SECONDARY))
         font = QFont(painter.font())
         font.setPointSize(8)
         painter.setFont(font)
+        painter.setPen(QColor(COLOR_TEXT_SECONDARY))
         painter.drawText(QRectF(side_rect.left(), 0, side_rect.width(), 14),
                          Qt.AlignmentFlag.AlignHCenter, "Robot in the ear canal")
-        painter.drawText(QRectF(end_rect.left() - 10, 0, end_rect.width() + 20, 14),
-                         Qt.AlignmentFlag.AlignHCenter, "Balloons (P1–P6)")
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(FRONT_COLOR)
+        painter.drawText(QRectF(front_rect.left() - 60, 0, front_rect.width() + 64, 14),
+                         Qt.AlignmentFlag.AlignRight, "Front ring (P1–P3)")
+        painter.setPen(BACK_COLOR)
+        painter.drawText(QRectF(back_rect.left() - 60, back_rect.top() - 15, back_rect.width() + 64, 14),
+                         Qt.AlignmentFlag.AlignRight, "Back ring (P4–P6)")
 
         self._paint_side(painter, side_rect)
-        self._paint_end(painter, end_rect)
+        offsets = self._ring_offsets()
+        self._paint_end(painter, front_rect, offsets["front"], 0)
+        self._paint_end(painter, back_rect, offsets["back"], 3)
 
     def _paint_side(self, painter: QPainter, r: QRectF) -> None:
-        tx, ty, yaw, pitch = self._pose
-        canal_half = r.height() * 0.34
+        # pixels per mm: the whole canal fits, with some room on the left for the wires.
+        # When the view is narrow that makes everything tiny, so we zoom in and only
+        # show the inner part of the canal (the entrance goes past the left edge).
+        ppm = min(r.height() * 0.84 / CANAL_DIAMETER_MM,
+                  max(r.width() * 0.80 / CANAL_LENGTH_MM,
+                      r.width() * 0.95 / (CANAL_LENGTH_MM * MIN_CANAL_SHOWN)))
+        canal_half = CANAL_DIAMETER_MM / 2 * ppm
         cy = r.center().y()
-        entrance_x = r.left() + r.width() * 0.22
-        drum_x = r.right() - r.width() * 0.08
+        drum_x = r.right() - 6
+        entrance_x = drum_x - CANAL_LENGTH_MM * ppm
+        top_wall, bottom_wall = cy - canal_half, cy + canal_half
 
         # head/skin around the canal, the canal itself, then the eardrum
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(_SKIN)
-        painter.drawRoundedRect(QRectF(entrance_x, r.top(), r.right() - entrance_x, r.height()), 10, 10)
+        skin_left = max(entrance_x, r.left())
+        painter.drawRoundedRect(QRectF(skin_left, r.top(), r.right() - skin_left, r.height()), 10, 10)
         grad = QLinearGradient(entrance_x, 0, drum_x, 0)
         grad.setColorAt(0.0, _SKIN_DARK)
         grad.setColorAt(1.0, _CANAL)
         painter.setBrush(QBrush(grad))
-        painter.drawRect(QRectF(entrance_x, cy - canal_half, drum_x - entrance_x, 2 * canal_half))
+        painter.drawRect(QRectF(entrance_x, top_wall, drum_x - entrance_x, 2 * canal_half))
         tilt = canal_half * math.tan(math.radians(15))   # eardrum is tilted, like in the 3D view
-        drum = QPainterPath()
-        drum.moveTo(drum_x - tilt, cy - canal_half)
-        drum.lineTo(drum_x + tilt, cy + canal_half)
         painter.setPen(QPen(_DRUM, 4))
-        painter.drawPath(drum)
+        painter.drawLine(QPointF(drum_x - tilt, top_wall), QPointF(drum_x + tilt, bottom_wall))
 
-        # robot: tip position from the insertion, offset by translation (ty),
-        # tilted by pitch around the balloon ring
-        body_r = canal_half * 0.32
-        length = r.width() * 0.62
-        # tip goes from just outside the entrance (0) to near the eardrum (1),
-        # leaving room for the camera cone / needle
-        tip_start, tip_end = entrance_x - body_r, drum_x - canal_half * 0.9
-        tip_x = tip_start + (tip_end - tip_start) * self._insertion
-        ring_x = tip_x - body_r * 2.2
-        center_y = cy + ty * canal_half * 0.2
+        # nothing goes through the canal walls (balloons pressing on them get flattened)
         painter.save()
-        # nothing goes through the canal walls: balloons pressing on a wall get flattened
         clip = QPainterPath()
-        clip.addRect(QRectF(entrance_x, cy - canal_half, r.right() - entrance_x, 2 * canal_half))
-        clip.addRect(QRectF(r.left(), r.top(), entrance_x - r.left(), r.height()))
+        clip.addRect(QRectF(entrance_x, top_wall, r.right() - entrance_x, 2 * canal_half))
+        if entrance_x > r.left():
+            clip.addRect(QRectF(r.left(), r.top(), entrance_x - r.left(), r.height()))
         painter.setClipPath(clip)
-        painter.translate(ring_x, center_y)
-        painter.rotate(pitch * _MAX_TILT_DEG)
 
-        # field of view of the camera at the tip, green when on target
+        body_r = ROBOT_DIAMETER_MM / 2 * ppm
+        ring_w = BALLOON_LENGTH_MM / 2 * ppm       # half-length of a balloon along the canal
+        # tip goes from just outside the entrance (0) to near the eardrum (1)
+        tip_start = entrance_x - 1.0 * ppm
+        tip_end = drum_x - CAMERA_DISTANCE_MM * ppm
+        tip_x = tip_start + (tip_end - tip_start) * self._insertion
+        offsets = self._ring_offsets()
+        front_x, back_x = tip_x - TIP_TO_FRONT_RING_MM * ppm, tip_x - TIP_TO_BACK_RING_MM * ppm
+        front_y = cy + offsets["front"][1] * canal_half
+        back_y = cy + offsets["back"][1] * canal_half
+        angle = math.degrees(math.atan2(front_y - back_y, front_x - back_x))
+
+        # balloons that point away from the viewer go behind the body
+        rings = [(front_x, front_y, 0), (back_x, back_y, 3)]
+        # seen from the side, cos(angle) = towards the viewer: balloons pointing
+        # away are drawn first (behind the body), the others after it
+        balloons = [(x, y, first + k) for x, y, first in rings for k in range(3)]
+        for x, y, i in balloons:
+            if math.cos(math.radians(balloon_angle(i))) < -0.01:
+                self._draw_side_balloon(painter, i, x, y, body_r, ring_w, top_wall, bottom_wall)
+
+        # body, camera cone, needle, wires: in the robot's own (tilted) frame,
+        # origin at the back ring
+        painter.save()
+        painter.translate(back_x, back_y)
+        painter.rotate(angle)
+        ring_gap = math.hypot(front_x - back_x, front_y - back_y)
+        tip_rel = ring_gap + TIP_TO_FRONT_RING_MM * ppm
+        tail = tip_rel - ROBOT_LENGTH_MM * ppm
         fov = QPainterPath()
-        tip_rel = tip_x - ring_x
         fov.moveTo(tip_rel, 0)
-        fov.lineTo(tip_rel + canal_half * 1.6, -canal_half * 0.9)
-        fov.lineTo(tip_rel + canal_half * 1.6, canal_half * 0.9)
+        fov.lineTo(tip_rel + CAMERA_DISTANCE_MM * ppm, -canal_half * 0.9)
+        fov.lineTo(tip_rel + CAMERA_DISTANCE_MM * ppm, canal_half * 0.9)
         fov.closeSubpath()
-        cone = _TARGET_GREEN if self._on_target else QColor(255, 255, 255)
-        cone.setAlpha(55 if self._insertion > 0.9 else 0)
+        cone = QColor(_TARGET_GREEN if self._on_target else QColor(255, 255, 255))
+        cone.setAlpha(60 if self._insertion > 0.9 else 0)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(cone)
         painter.drawPath(fov)
 
-        balloons = self._side_balloons(body_r, canal_half)
-        for b in balloons:                     # back balloons first (behind the body)
-            if b[0] < 0:
-                self._draw_side_balloon(painter, b, dark=True)
-
+        # thin tubes/wires going back out of the ear (air for the front and back
+        # balloons, camera cable), sagging a little
+        for k, color in enumerate(_WIRE_COLORS):
+            y0 = (k - 1) * body_r * 0.5
+            wire = QPainterPath(QPointF(tail + 1, y0))
+            far = tail - r.width()
+            wire.cubicTo(QPointF(tail - r.width() * 0.3, y0),
+                         QPointF(far + r.width() * 0.3, y0 + body_r * 2),
+                         QPointF(far, y0 + body_r * 2))
+            painter.setPen(QPen(color, max(1.5, WIRE_DIAMETER_MM * ppm)))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(wire)
         painter.setPen(QPen(_BODY_EDGE, 1.5))
         painter.setBrush(_BODY)
-        painter.drawRoundedRect(QRectF(tip_rel - length, -body_r, length, 2 * body_r), body_r, body_r)
+        painter.drawRoundedRect(QRectF(tail, -body_r, tip_rel - tail, 2 * body_r), body_r, body_r)
         painter.setBrush(QColor("#30343A"))      # camera lens
-        painter.drawEllipse(QPointF(tip_rel - body_r * 0.35, 0), body_r * 0.35, body_r * 0.35)
-
+        painter.drawEllipse(QPointF(tip_rel - body_r * 0.4, 0), body_r * 0.32, body_r * 0.32)
         if self._needle > 0.01:
-            # needle travels from the tip to the eardrum
             reach = (drum_x - tip_x) * self._needle
             painter.setPen(QPen(QColor("#C0C8D0"), 2))
-            painter.drawLine(QPointF(tip_rel, body_r * 0.4), QPointF(tip_rel + reach, body_r * 0.4))
+            painter.drawLine(QPointF(tip_rel, body_r * 0.45), QPointF(tip_rel + reach, body_r * 0.45))
             if self._needle > 0.97:
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QColor("#4FA3FF"))
-                painter.drawEllipse(QPointF(tip_rel + reach, body_r * 0.4), 4, 4)
-
-        for b in balloons:                     # front balloons on top
-            if b[0] >= 0:
-                self._draw_side_balloon(painter, b, dark=False)
+                painter.drawEllipse(QPointF(tip_rel + reach, body_r * 0.45), 4, 4)
         painter.restore()
 
-    def _side_balloons(self, body_r: float, canal_half: float) -> list:
-        # (depth, y, size, pressure, index): balloon i around the body, seen
-        # from the side. The side view shows the vertical (y) plane; the
-        # horizontal component becomes the depth (in front/behind the body).
-        # Sized so that at ~0.7 (the inflation threshold) they touch the canal wall.
-        max_size = (canal_half - body_r) / 1.6
-        out = []
-        for i, p in enumerate(self._pressures):
-            a = math.radians(i * 360.0 / NUM_CHANNELS)
-            size = max_size * (0.3 + p)
-            depth, y = math.cos(a), math.sin(a) * (body_r + size * 0.8)
-            out.append((depth, y, size, p, i))
-        return sorted(out, key=lambda b: b[0])
+        for x, y, i in balloons:
+            if math.cos(math.radians(balloon_angle(i))) >= -0.01:
+                self._draw_side_balloon(painter, i, x, y, body_r, ring_w, top_wall, bottom_wall)
+        painter.restore()
 
-    def _draw_side_balloon(self, painter, b, dark: bool) -> None:
-        _depth, y, size, p, _i = b
-        color = _mix(_BALLOON_EMPTY, _BALLOON_FULL, p)
-        if dark:
-            color = color.darker(140)
+    def _draw_side_balloon(self, painter, i, x, y, body_r, ring_w, top_wall, bottom_wall):
+        p = self._pressures[i]
+        fill = self._fill(p)
+        a = math.radians(balloon_angle(i))
+        color = _pressure_color(i, p)
+        if math.cos(a) < 0:
+            color = color.darker(118)            # behind the body
+        bulge = ring_w * (0.5 + 0.5 * fill)      # half-size along the canal
+        path = QPainterPath()
+        if abs(math.sin(a)) < 0.3:
+            # pointing at (or away from) the viewer: a round balloon over the body
+            ry = body_r * (0.6 + 0.55 * fill)
+            path.addEllipse(QPointF(x, y), bulge, ry)
+            shine = QPointF(x - bulge * 0.35, y - ry * 0.45)
+        else:
+            # pointing down or up: a round balloon from the body to the wall. When it
+            # touches, it goes a little "past" the wall and the clipping flattens it.
+            direction = 1 if math.sin(a) > 0 else -1
+            start = y + direction * body_r * 0.55
+            wall = bottom_wall if direction > 0 else top_wall
+            length = max(body_r * 0.4, abs(wall - start) * fill + (ring_w * 0.25 if self._seated else 0))
+            cy = start + direction * length / 2
+            path.addEllipse(QPointF(x, cy), bulge, length / 2)
+            shine = QPointF(x - bulge * 0.35, cy - length * 0.22)
+        self._paint_balloon(painter, i, path, color, shine, bulge * 0.25)
+
+    def _paint_balloon(self, painter, i, path: QPainterPath, color: QColor, shine: QPointF,
+                       shine_r: float, alpha: int = 255) -> None:
+        # balloon body + a little white shine, + a white outline while its pressure changes
+        color = QColor(color)
+        color.setAlpha(alpha)
         painter.setPen(QPen(color.darker(150), 1))
         painter.setBrush(color)
-        painter.drawEllipse(QPointF(0, y), size * 1.25, size * 0.8)
+        painter.drawPath(path)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(255, 255, 255, int(110 * alpha / 255)))
+        painter.drawEllipse(shine, shine_r * 1.4, shine_r)
+        if self._glow[i] > 0:
+            painter.setPen(QPen(QColor(255, 255, 255, int(230 * self._glow[i] * alpha / 255)), 2.5))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
 
-    def _paint_end(self, painter: QPainter, r: QRectF) -> None:
-        tx, ty, _yaw, _pitch = self._pose
+    def _paint_end(self, painter: QPainter, r: QRectF, offset, first: int) -> None:
         c = r.center()
-        canal_r = r.width() / 2 - 4
+        canal_r = r.width() / 2 - 3
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(_SKIN)
-        painter.drawEllipse(c, canal_r + 4, canal_r + 4)
+        painter.drawEllipse(c, canal_r + 3, canal_r + 3)
         painter.setBrush(_CANAL)
         painter.drawEllipse(c, canal_r, canal_r)
+        painter.save()
+        wall = QPainterPath()
+        wall.addEllipse(c, canal_r, canal_r)
+        painter.setClipPath(wall)                  # balloons flatten against the wall
 
-        body_r = canal_r * 0.28
-        # fades in as the robot goes in (seen from outside, it's "behind" the entrance)
+        body_r = canal_r * ROBOT_SIZE
+        # fades in as the robot goes in (seen from outside it's behind the entrance)
         alpha = int(255 * max(0.15, min(1.0, self._insertion)))
-        center = QPointF(c.x() + tx * canal_r * 0.25, c.y() + ty * canal_r * 0.25)
-        font = QFont(painter.font())
-        font.setBold(True)
-        for i, p in enumerate(self._pressures):
-            a = math.radians(i * 360.0 / NUM_CHANNELS)
-            size = body_r * (0.30 + 0.62 * p)
-            dist = body_r + size * 0.85
-            pos = QPointF(center.x() + math.cos(a) * dist, center.y() + math.sin(a) * dist)
-            color = _mix(_BALLOON_EMPTY, _BALLOON_FULL, p)
-            color.setAlpha(alpha)
-            painter.setPen(QPen(color.darker(150), 1))
-            painter.setBrush(color)
-            painter.drawEllipse(pos, size, size)
-            font.setPixelSize(max(7, int(size * 0.9)))
-            painter.setFont(font)
-            painter.setPen(QColor(255, 255, 255, alpha))
-            painter.drawText(QRectF(pos.x() - size, pos.y() - size, 2 * size, 2 * size),
-                             Qt.AlignmentFlag.AlignCenter, str(i + 1))
+        center = QPointF(c.x() + offset[0] * canal_r, c.y() + offset[1] * canal_r)
+        rel = (offset[0] * canal_r, offset[1] * canal_r)
+        labels = []
+        for i in range(first, first + 3):
+            angle_deg = balloon_angle(i)
+            p = self._pressures[i]
+            fill = self._fill(p)
+            a = math.radians(angle_deg)
+            d = (math.cos(a), math.sin(a))
+            # distance from the ring centre to the wall along d (circle intersection)
+            dot = rel[0] * d[0] + rel[1] * d[1]
+            to_wall = -dot + math.sqrt(max(0.0, dot * dot - (rel[0] ** 2 + rel[1] ** 2) + canal_r ** 2))
+            start = body_r * 0.7
+            gap = max(2.0, to_wall - start)
+            length = max(body_r * 0.4, gap * fill + (canal_r * 0.08 if self._seated else 0))
+            bulge = min(canal_r * 0.36, length * 0.6) * (0.6 + 0.4 * fill)
+            painter.save()
+            painter.translate(center)
+            painter.rotate(angle_deg)
+            painter.translate(start, 0)
+            path = QPainterPath()
+            path.addEllipse(QPointF(length / 2, 0), length / 2, bulge)
+            self._paint_balloon(painter, i, path, _pressure_color(i, p),
+                                QPointF(length * 0.55, -bulge * 0.45), bulge * 0.22, alpha)
+            painter.restore()
+            dist = start + min(length, to_wall - start) * 0.6
+            labels.append((QPointF(center.x() + d[0] * dist, center.y() + d[1] * dist), i, p))
+        painter.restore()
+
         body = QColor(_BODY)
         body.setAlpha(alpha)
         painter.setPen(QPen(_BODY_EDGE, 1.5))
@@ -273,3 +410,12 @@ class RobotView(QWidget):
         painter.drawEllipse(center, body_r, body_r)
         painter.setBrush(QColor(48, 52, 58, alpha))
         painter.drawEllipse(center, body_r * 0.35, body_r * 0.35)
+        font = QFont(painter.font())
+        font.setBold(True)
+        font.setPixelSize(max(8, int(canal_r * 0.2)))
+        painter.setFont(font)
+        for pos, i, p in labels:
+            painter.setPen(QColor(255, 255, 255, alpha) if p > 0.45 else QColor(60, 60, 60, alpha))
+            painter.drawText(QRectF(pos.x() - 12, pos.y() - 10, 24, 20),
+                             Qt.AlignmentFlag.AlignCenter, str(i + 1))
+

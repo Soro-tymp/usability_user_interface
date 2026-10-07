@@ -295,8 +295,11 @@ class ProcedureWindow(QMainWindow):
             self.camera_view.show_pose_readout = False
             self.camera_view.show_danger = True
             self.camera_view.drum_overlay = self._paint_stars
-            self.robot_view.setVisible(True)
+            self.control_panel.show_robot()
             self.control_panel.setFixedHeight(250)
+            self.robot_view.contact_level = INFLATION_THRESHOLD
+            # big explanations on the side, for kids and parents
+            self.right_panel.step_card.set_large()
             # Stars: they move and pulse, so the game ticks continuously
             self._game_tick_last = time.monotonic()
             self._game_tick = QTimer(self)
@@ -585,6 +588,7 @@ class ProcedureWindow(QMainWindow):
     # perchè una volta tornati indietro il livello not stable anymore.
 
     def _set_level(self, level: float) -> None:
+        self.robot_view.set_seated(False)
         self.viewmodel.set_neutral_level(None)
         self.viewmodel.inflate(level)
 
@@ -604,6 +608,7 @@ class ProcedureWindow(QMainWindow):
             # Steer around the inflated, stable level from now on.
             self.viewmodel.set_neutral_level(INFLATION_THRESHOLD)
             self._log("inflation_reached", level=INFLATION_THRESHOLD)
+            self.robot_view.set_seated(True)   # balloons now touch the canal wall
             self._countdown_left = self._countdown_s
             self._show_countdown()
             self._countdown_timer.start()
@@ -684,6 +689,7 @@ class ProcedureWindow(QMainWindow):
         self._deflate_elapsed = 0.0
         self._log("deflate_confirmed")
         self.robot_view.set_needle(0.0)   # needle back in before the balloons go down
+        self.robot_view.set_seated(False)
         self.status_banner.set_progress(None)
         self.status_banner.show_message(self._t(
             "Deflating…", "Letting the air out… 💨"), "active")
@@ -872,6 +878,13 @@ class ProcedureWindow(QMainWindow):
             self._on_joystick_button(BUTTON_X4)   # same as X4
         else:
             super().keyPressEvent(event)
+
+    def resizeEvent(self, event):
+        if self._game:
+            small = self.width() < game_mode.SMALL_SCREEN_WIDTH
+            self.right_panel.setFixedWidth(game_mode.EXPLANATION_PANEL_WIDTH_SMALL if small
+                                           else game_mode.EXPLANATION_PANEL_WIDTH)
+        super().resizeEvent(event)
 
     def closeEvent(self, event):
         if self._game:
