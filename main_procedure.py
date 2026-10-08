@@ -140,6 +140,7 @@ class ProcedureWindow(QMainWindow):
         # Game round state
         self._round_started_at = None   # time.monotonic() when START was pressed
         self._round_id = 0
+        self._injecting = False          # game: needle in, before the deflation is allowed
         self._player_age = None          # asked when START is pressed
         self._group_id = None            # age group -> level + leaderboard
         self._difficulty = None
@@ -300,6 +301,7 @@ class ProcedureWindow(QMainWindow):
             self.robot_view.contact_level = INFLATION_THRESHOLD
             # big explanations on the side, for kids and parents
             self.right_panel.step_card.set_large()
+            self.right_panel.expand_card()
             # Stars: they move and pulse, so the game ticks continuously
             self._game_tick_last = time.monotonic()
             self._game_tick = QTimer(self)
@@ -372,8 +374,10 @@ class ProcedureWindow(QMainWindow):
             self.robot_view.set_insertion(0.15)
             self.robot_view.set_needle(0.0)
         else:
+            # the needle is driven by _start_injection / _end_injection
             self.robot_view.set_insertion(1.0)
-            self.robot_view.set_needle(1.0 if self._locked else 0.0)
+            if not self._locked:
+                self.robot_view.set_needle(0.0)
 
     def _show_default_banner(self) -> None:
         # The banner sets the "resting" message for each step. Mentre premiamo pedale,
@@ -426,7 +430,9 @@ class ProcedureWindow(QMainWindow):
                 self.status_banner.show_message(self._t(
                     "Device LOCKED — insert the needle and inject. "
                     f"When done, hold the pedal for {self._deflate_hold_s:.0f} s to deflate",
-                    "Locked! 💉 Medicine given. HOLD the pedal to let the air out"), "success")
+                    "Medicine given! ✅ Now HOLD the pedal to let the air out 💨"), "success")
+            if self._injecting:
+                self.status_banner.show_message("Locked! 🔒 Giving the medicine… 💉", "active")
 
     def _show_danger_banner(self) -> None:
         # game only for now: in the clinician version the red zone is recorded but not shown
@@ -504,6 +510,7 @@ class ProcedureWindow(QMainWindow):
         elif self._stage == STAGE_COMPLETE:
             # Unlock and go back to aligning; pressures stay where they are.
             self._locked = False
+            self._injecting = False
             self._enter_stage(STAGE_ALIGN)
 
     def _stop_all_timers(self) -> None: #literally stop every timer and cancel every pedal hold in progress
@@ -552,6 +559,10 @@ class ProcedureWindow(QMainWindow):
             self._lock_hold.start()
         elif self._stage == STAGE_COMPLETE and self._locked and not self._finished:
             if self._deflate_timer.isActive():
+                return
+            if self._injecting:
+                self._log("deflate_rejected_injecting")
+                self.status_banner.show_message("Wait, the medicine is going in… 💉", "warning")
                 return
             self.status_banner.show_message(self._t(
                 "Keep holding to DEFLATE all balloons…", "Keep holding… 💨"), "active")
@@ -679,7 +690,28 @@ class ProcedureWindow(QMainWindow):
     def _on_lock_completed(self) -> None:
         self._log("locked")
         self._locked = True
+        self._injecting = self._game
         self._enter_stage(STAGE_COMPLETE)
+        if self._game:
+            self._start_injection()
+
+    def _start_injection(self) -> None:
+        # Game: needle goes in, medicine onto the eardrum, needle comes back out on
+        # its own; only then can the balloons be deflated.
+        self._log("injection_start")
+        self.robot_view.set_needle(1.0)
+        round_id = self._round_id
+        QTimer.singleShot(int(game_mode.GAME_INJECTION_SECONDS * 1000),
+                          lambda: self._end_injection(round_id))
+
+    def _end_injection(self, round_id: int) -> None:
+        if round_id != self._round_id or not self._injecting:
+            return   # new round or Back pressed meanwhile
+        self._injecting = False
+        self._log("injection_done")
+        self.robot_view.set_needle(0.0)
+        if self._stage == STAGE_COMPLETE and not self._deflate_hold.is_running:
+            self._show_default_banner()
 
 
     # PART 3.3: Complete stage
@@ -735,6 +767,7 @@ class ProcedureWindow(QMainWindow):
         self._mode_router.set_mode(MODE_TRANSLATION)
         self._round_id += 1
         self._round_started_at = None
+        self._injecting = False
         self._player_age = self._group_id = self._difficulty = None
         self._star_field = None
         # the green zone only counts once all the stars are collected
@@ -884,6 +917,7 @@ class ProcedureWindow(QMainWindow):
             small = self.width() < game_mode.SMALL_SCREEN_WIDTH
             self.right_panel.setFixedWidth(game_mode.EXPLANATION_PANEL_WIDTH_SMALL if small
                                            else game_mode.EXPLANATION_PANEL_WIDTH)
+            self.right_panel.step_card.set_text_size(big=not small)
         super().resizeEvent(event)
 
     def closeEvent(self, event):

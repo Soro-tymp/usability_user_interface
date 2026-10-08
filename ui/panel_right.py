@@ -32,3 +32,10 @@ class RightPanel(QWidget):
 
         self.btn_confirm = QPushButton("Confirm")
         layout.addWidget(self.btn_confirm)
+        self._layout = layout
+
+    def expand_card(self) -> None:
+        # Game: the explanation card takes all the free height (instead of an
+        # empty gap above the START button)
+        self._layout.setStretch(self._layout.indexOf(self.step_card), 1)
+        self._layout.setStretch(2, 0)   # the spacer below the button pad

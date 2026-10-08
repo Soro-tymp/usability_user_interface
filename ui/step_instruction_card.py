@@ -42,13 +42,23 @@ class StepInstructionCard(QWidget):
 
     def set_large(self) -> None:
         # Game: big text, for kids and parents to read from a distance
-        self._title_label.setStyleSheet(
-            f"font-size: 22pt; font-weight: 800; color: {COLOR_TEXT_PRIMARY}; border: none;")
-        self._body_label.setStyleSheet(
-            f"font-size: 15pt; color: {COLOR_TEXT_PRIMARY}; border: none;")
+        self.set_text_size(big=False)
         self._body_label.setTextFormat(Qt.TextFormat.RichText)
         self._body_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._body_label.setMinimumHeight(320)
+        self._body_label.setMinimumHeight(200)
+        # the card fills the panel (see RightPanel.expand_card): keep title + text
+        # together in the middle of it, instead of an empty strip at the bottom
+        layout = self.layout()
+        layout.insertStretch(0, 1)
+        layout.addStretch(1)
+
+    def set_text_size(self, big: bool) -> None:
+        # big = wide panel (large screen): even bigger text, so the card doesn't look empty
+        title_pt, body_pt = (28, 19) if big else (22, 15)
+        self._title_label.setStyleSheet(
+            f"font-size: {title_pt}pt; font-weight: 800; color: {COLOR_TEXT_PRIMARY}; border: none;")
+        self._body_label.setStyleSheet(
+            f"font-size: {body_pt}pt; color: {COLOR_TEXT_PRIMARY}; border: none;")
 
     def set_content(self, title: str, body: str) -> None:
         self._title_label.setText(title)

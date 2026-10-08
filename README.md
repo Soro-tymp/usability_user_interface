@@ -144,6 +144,9 @@ opposite ways), slides in at the start, shows the needle once locked and slides 
 On the right, the step explanations are shown big, in two parts: "🤖 The robot"
 (what the real device does, for parents to explain) and "🎮 Your turn" (what to do).
 
+Once locked, the needle goes in, leaves the medicine (a blue drop) on the eardrum and
+comes back out by itself (`GAME_INJECTION_SECONDS`); the pedal only deflates after that.
+
 The timer starts with START and stops once the balloons are deflated, +3 s every time
 the cross touches the red zone (ossicles). Stars and a top-10 board **per age group**
 are saved in `game_data/highscores.json` (delete it to reset the boards). Every round

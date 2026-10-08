@@ -30,7 +30,8 @@ so the proportions are real. The robot ones are GUESSES: put the real device's h
 import math
 
 from PyQt6.QtCore import Qt, QPointF, QRectF, QTimer
-from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QPainterPath, QLinearGradient, QBrush
+from PyQt6.QtGui import (QPainter, QColor, QPen, QFont, QFontMetrics, QPainterPath,
+                         QLinearGradient, QBrush)
 from PyQt6.QtWidgets import QWidget, QSizePolicy
 
 from ui.motion_controller import NUM_CHANNELS
@@ -53,7 +54,10 @@ _GLOW_DECAY = 0.06                  # per tick
 _SKIN = QColor(205, 164, 142)
 _SKIN_DARK = QColor(150, 105, 88)
 _CANAL = QColor(70, 45, 40)
-_DRUM = QColor(235, 200, 190)
+_DRUM = QColor("#EDE3DF")            # pearly grey-pink membrane
+_MIDDLE_EAR = QColor(58, 38, 52)
+_LABEL = QColor(74, 46, 37)
+_MEDICINE = QColor("#4FA3FF")
 _BODY = QColor("#D8DEE3")
 _BODY_EDGE = QColor("#7C8790")
 _TARGET_GREEN = QColor("#5EDA94")
@@ -102,6 +106,7 @@ class RobotView(QWidget):
         # current value / where it's going (eased every tick)
         self._insertion, self._insertion_target = 0.0, 0.0
         self._needle, self._needle_target = 0.0, 0.0
+        self._drop_y = None              # where the medicine went on the eardrum (x canal radius)
         self._timer = QTimer(self)
         self._timer.setInterval(_TICK_MS)
         self._timer.timeout.connect(self._on_tick)
@@ -130,6 +135,8 @@ class RobotView(QWidget):
     def set_insertion(self, value: float, animate: bool = True) -> None:
         # 0 = outside the ear, 1 = fully inserted
         self._insertion_target = value
+        if value < 1.0:
+            self._drop_y = None          # new procedure: no medicine on the eardrum yet
         if not animate:
             self._insertion = value
         self._kick()
@@ -213,12 +220,13 @@ class RobotView(QWidget):
         # pixels per mm: the whole canal fits, with some room on the left for the wires.
         # When the view is narrow that makes everything tiny, so we zoom in and only
         # show the inner part of the canal (the entrance goes past the left edge).
-        ppm = min(r.height() * 0.84 / CANAL_DIAMETER_MM,
+        ppm = min(r.height() * 0.66 / CANAL_DIAMETER_MM,
                   max(r.width() * 0.80 / CANAL_LENGTH_MM,
                       r.width() * 0.95 / (CANAL_LENGTH_MM * MIN_CANAL_SHOWN)))
         canal_half = CANAL_DIAMETER_MM / 2 * ppm
         cy = r.center().y()
-        drum_x = r.right() - 6
+        middle_ear_w = max(18.0, 2.5 * ppm)      # a bit of the middle ear, behind the eardrum
+        drum_x = r.right() - middle_ear_w
         entrance_x = drum_x - CANAL_LENGTH_MM * ppm
         top_wall, bottom_wall = cy - canal_half, cy + canal_half
 
@@ -227,14 +235,74 @@ class RobotView(QWidget):
         painter.setBrush(_SKIN)
         skin_left = max(entrance_x, r.left())
         painter.drawRoundedRect(QRectF(skin_left, r.top(), r.right() - skin_left, r.height()), 10, 10)
+        # the eardrum: a thin membrane closing the canal, tilted (like in the 3D view)
+        # and pulled in at its centre (like a shallow cone towards the middle ear)
+        tilt = canal_half * math.tan(math.radians(15))
+        drum_top = QPointF(drum_x - tilt, top_wall)
+        drum_bottom = QPointF(drum_x + tilt, bottom_wall)
+        drum_ctrl = QPointF(drum_x + canal_half * 0.45, cy)
+
+        def drum_x_at(y):
+            t = max(0.0, min(1.0, (y - top_wall) / (2 * canal_half)))
+            return ((1 - t) ** 2 * drum_top.x() + 2 * t * (1 - t) * drum_ctrl.x()
+                    + t * t * drum_bottom.x())
+
+        # middle ear: the small air space behind the eardrum
+        middle = QPainterPath(drum_top)
+        middle.quadTo(drum_ctrl, drum_bottom)
+        middle.lineTo(QPointF(r.right() - 2, bottom_wall + canal_half * 0.25))
+        middle.lineTo(QPointF(r.right() - 2, top_wall - canal_half * 0.25))
+        middle.closeSubpath()
+        painter.setBrush(_MIDDLE_EAR)
+        painter.drawPath(middle)
+        # ear canal, up to the eardrum
+        canal = QPainterPath(QPointF(entrance_x, top_wall))
+        canal.lineTo(drum_top)
+        canal.quadTo(drum_ctrl, drum_bottom)
+        canal.lineTo(QPointF(entrance_x, bottom_wall))
+        canal.closeSubpath()
         grad = QLinearGradient(entrance_x, 0, drum_x, 0)
         grad.setColorAt(0.0, _SKIN_DARK)
         grad.setColorAt(1.0, _CANAL)
         painter.setBrush(QBrush(grad))
-        painter.drawRect(QRectF(entrance_x, top_wall, drum_x - entrance_x, 2 * canal_half))
-        tilt = canal_half * math.tan(math.radians(15))   # eardrum is tilted, like in the 3D view
-        painter.setPen(QPen(_DRUM, 4))
-        painter.drawLine(QPointF(drum_x - tilt, top_wall), QPointF(drum_x + tilt, bottom_wall))
+        painter.drawPath(canal)
+        drum = QPainterPath(drum_top)
+        drum.quadTo(drum_ctrl, drum_bottom)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(_DRUM, max(3.0, 0.25 * ppm)))
+        painter.drawPath(drum)
+        # tiny ear bone (malleus) attached to the middle of the eardrum
+        painter.setPen(QPen(QColor("#E8D9B5"), max(2.0, 0.3 * ppm)))
+        umbo = QPointF(drum_x_at(cy), cy)
+        painter.drawLine(umbo, QPointF(umbo.x() + middle_ear_w * 0.5, top_wall - canal_half * 0.1))
+        # medicine left on the eardrum
+        if self._drop_y is not None:
+            y = cy + self._drop_y * canal_half
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(_MEDICINE)
+            painter.drawEllipse(QPointF(drum_x_at(y), y), max(3.0, 0.35 * ppm), max(4.0, 0.5 * ppm))
+
+        # labels, so that everyone knows what they're looking at
+        band = r.height() / 2 - canal_half
+        font = QFont(painter.font())
+        font.setPixelSize(int(max(9, min(13, band * 0.45))))
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(_LABEL)
+        fm = QFontMetrics(font)
+        canal_text, drum_text, middle_text = "EAR CANAL  ⟶", "EARDRUM ↘", "middle ear ↗"
+        canal_left = max(entrance_x, r.left()) + 8
+        label_right = r.right() - 4
+        top_band = QRectF(canal_left, top_wall - band, label_right - canal_left, band)
+        bottom_band = QRectF(canal_left, bottom_wall, label_right - canal_left, band)
+        left, right = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight
+        painter.drawText(top_band, right, drum_text)
+        painter.drawText(bottom_band, right, middle_text)
+        # "EAR CANAL" top-left, or bottom-left if it would bump into "EARDRUM"
+        if fm.horizontalAdvance(canal_text + drum_text) + 20 < top_band.width():
+            painter.drawText(top_band, left, canal_text)
+        elif fm.horizontalAdvance(canal_text + middle_text) + 20 < bottom_band.width():
+            painter.drawText(bottom_band, left, canal_text)
 
         # nothing goes through the canal walls (balloons pressing on them get flattened)
         painter.save()
@@ -302,13 +370,13 @@ class RobotView(QWidget):
         painter.setBrush(QColor("#30343A"))      # camera lens
         painter.drawEllipse(QPointF(tip_rel - body_r * 0.4, 0), body_r * 0.32, body_r * 0.32)
         if self._needle > 0.01:
-            reach = (drum_x - tip_x) * self._needle
-            painter.setPen(QPen(QColor("#C0C8D0"), 2))
+            needle_y = front_y + body_r * 0.45
+            reach = (drum_x_at(needle_y) - tip_x) * self._needle
+            painter.setPen(QPen(QColor("#C0C8D0"), max(2.0, 0.2 * ppm)))
             painter.drawLine(QPointF(tip_rel, body_r * 0.45), QPointF(tip_rel + reach, body_r * 0.45))
             if self._needle > 0.97:
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor("#4FA3FF"))
-                painter.drawEllipse(QPointF(tip_rel + reach, body_r * 0.45), 4, 4)
+                # the medicine goes onto the eardrum, and stays there
+                self._drop_y = (needle_y - cy) / canal_half
         painter.restore()
 
         for x, y, i in balloons:
